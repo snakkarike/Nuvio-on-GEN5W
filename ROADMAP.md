@@ -4,12 +4,12 @@
 - [x] Establish repository structure matching NEMESIS specification.
 - [x] Adapt `network-guard` for `org.nuvio.gen5w` package UID binding.
 - [x] Configure `NEMESIS.data` and `USB-NEMESIS.data` with package dependencies (`media.codecs`, `keyboard.hackers`, `keyboard.activate`).
-- [ ] Port Android 4.4 / API 19 Gradle project skeleton with vendored ExoPlayer 2.x and `VehicleVideoGate.java`.
+- [x] Port Android 4.4 / API 19 Gradle project skeleton with vendored ExoPlayer 2.x and `VehicleVideoGate.java`.
 
 ## Milestone 2: Native Android Shell & Player Bridge
-- [ ] Integrate `NativePlaybackBridge.java`, `NativePlaybackService.java`, and `NativeVideoOverlay.java`.
-- [ ] Configure `MainActivity.kt` with a KitKat-optimized `WebView` (caching, DOM storage, hardware acceleration).
-- [ ] Test local HTTP stream playback over the native ExoPlayer overlay with vehicle park checking.
+- [x] Integrate `NativePlaybackBridge.java`, `NativePlaybackService.java`, and `NativeVideoOverlay.java`.
+- [x] Configure `MainActivity.kt` with a KitKat-optimized `WebView` (caching, DOM storage, hardware acceleration).
+- [x] Test local HTTP stream playback over the native ExoPlayer overlay with vehicle park checking.
 
 ## Milestone 3: Nuvio Frontend Integration
 - [ ] Pull `NuvioMedia/NuvioTVSmart` / `NuvioWeb` core interface.

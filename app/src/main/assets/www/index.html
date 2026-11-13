@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Nuvio on GEN5W - Player Bridge Test Harness</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Automotive Header Bar -->
+        <header class="header-bar">
+            <div class="logo-area">
+                <span class="logo-badge">NUVIO</span>
+                <span class="platform-badge">GEN5W / API 19</span>
+            </div>
+            <div class="park-indicator" id="parkStatusBadge">
+                <span class="status-dot"></span>
+                <span class="status-text" id="parkStatusText">PARKED</span>
+            </div>
+        </header>
+
+        <!-- Main Dashboard -->
+        <main class="main-content">
+            <!-- Left Panel: Playback Controls & Presets -->
+            <section class="panel-section control-panel">
+                <h2 class="section-title">Stream Source</h2>
+                
+                <div class="input-group">
+                    <label for="streamUrlInput">Media URL (HTTP / HLS / Debrid)</label>
+                    <input type="text" id="streamUrlInput" placeholder="https://.../stream.mp4 or stream.m3u8" value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">
+                </div>
+
+                <div class="preset-buttons">
+                    <button class="btn btn-secondary" id="btnPresetMp4">Preset MP4</button>
+                    <button class="btn btn-secondary" id="btnPresetHls">Preset HLS</button>
+                    <button class="btn btn-primary" id="btnLoadStream">Load &amp; Play</button>
+                </div>
+
+                <h2 class="section-title" style="margin-top: 20px;">Playback Deck</h2>
+                
+                <div class="playback-controls">
+                    <button class="btn btn-ctrl" id="btnRewind">-10s</button>
+                    <button class="btn btn-ctrl btn-play" id="btnPlayPause">&#9658; Play</button>
+                    <button class="btn btn-ctrl" id="btnForward">+10s</button>
+                    <button class="btn btn-ctrl btn-danger" id="btnStop">&#9632; Stop</button>
+                </div>
+
+                <!-- Progress / Seek Bar -->
+                <div class="progress-container">
+                    <span class="time-label" id="currentTimeLabel">00:00</span>
+                    <input type="range" id="seekSlider" min="0" max="100" value="0">
+                    <span class="time-label" id="durationLabel">00:00</span>
+                </div>
+
+                <!-- Volume and Aspect Ratio -->
+                <div class="row-controls">
+                    <div class="control-box">
+                        <label>Aspect Ratio</label>
+                        <div class="button-toggle-group">
+                            <button class="btn-toggle active" data-aspect="fit">FIT</button>
+                            <button class="btn-toggle" data-aspect="fill">FILL</button>
+                            <button class="btn-toggle" data-aspect="stretch">STRETCH</button>
+                        </div>
+                    </div>
+
+                    <div class="control-box">
+                        <label>Volume</label>
+                        <input type="range" id="volumeSlider" min="0" max="100" value="100">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Vehicle Safety Interlock & Bridge Diagnostics -->
+            <section class="panel-section telemetry-panel">
+                <h2 class="section-title">Safety Interlock (VehicleVideoGate)</h2>
+                
+                <div class="gate-status-card" id="gateCard">
+                    <div class="gate-header">
+                        <strong id="gateStateHeader">Vehicle Stationary (In Park)</strong>
+                    </div>
+                    <p class="gate-subtext" id="gateStateDesc">Hardware video decoding enabled. Video rendering on NativeVideoOverlay.</p>
+                </div>
+
+                <div class="simulation-controls">
+                    <button class="btn btn-warning" id="btnSimulateDrive">Simulate Drive Mode (Block Video)</button>
+                    <button class="btn btn-success" id="btnSimulatePark">Simulate Park Mode (Allow Video)</button>
+                </div>
+
+                <h2 class="section-title" style="margin-top: 20px;">Bridge Event Log</h2>
+                <div class="event-log-console" id="logConsole">
+                    <div class="log-line info">[System] Bridge initialized. Ready.</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+

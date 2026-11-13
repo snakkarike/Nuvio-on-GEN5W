@@ -1,0 +1,12 @@
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="background_dark">#FF121214</color>
+    <color name="surface_dark">#FF1E1E24</color>
+    <color name="accent_blue">#FF007AFF</color>
+    <color name="warning_amber">#FFFF9500</color>
+    <color name="warning_red">#FFFF3B30</color>
+    <color name="text_muted">#FFAAAAAA</color>
+    <color name="overlay_scrim">#E6000000</color>
+</resources>
+
