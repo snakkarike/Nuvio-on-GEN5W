@@ -139,7 +139,7 @@ EOF
         # Android 4.4 rejects even an identical range as an overlap. Only accept
         # that result when this guard installed it in this exact netd instance.
         400\ *'Invalid argument'*) [ "$SAVED_TOKEN" = "$DNS_TOKEN" ]; return $? ;;
-        *) echo "Jellyfin DNS binding refused: $ANSWER"; return 1 ;;
+        *) echo "Nuvio DNS binding refused: $ANSWER"; return 1 ;;
     esac
 }
 
@@ -150,7 +150,7 @@ cleanup() {
         [ -r "$DIR/lock/boot" ] && read -r LOCK_BOOT < "$DIR/lock/boot"
         case "$LOCK_PID" in ''|*[!0-9]*) return 1 ;; esac
         if { [ -z "$LOCK_BOOT" ] || [ "$LOCK_BOOT" = "$CURRENT_BOOT" ]; } && [ "$LOCK_PID" != "$$" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
-            echo "Stop the Jellyfin network service before removing its rules."
+            echo "Stop the Nuvio network service before removing its rules."
             return 1
         fi
         rm -f "$DIR/lock/pid" "$DIR/lock/boot"

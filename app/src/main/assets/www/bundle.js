@@ -313,6 +313,7 @@
 
 })(window);
 
+
 /* --- End polyfills.js --- */
 
 /* --- Begin addons.js --- */
@@ -468,6 +469,7 @@
     window.AddonManager = new AddonManager();
 
 })(window);
+
 
 /* --- End addons.js --- */
 
@@ -634,6 +636,7 @@
 
 })(window);
 
+
 /* --- End debrid.js --- */
 
 /* --- Begin api.js --- */
@@ -755,6 +758,7 @@
     window.StremioApi = new StremioApi();
 
 })(window);
+
 
 /* --- End api.js --- */
 
@@ -927,6 +931,7 @@
     window.PlayerBridge = new PlayerBridge();
 
 })(window);
+
 
 /* --- End player-bridge.js --- */
 
@@ -1440,6 +1445,7 @@
 
 })(window);
 
+
 /* --- End ui.js --- */
 
 /* --- Begin app.js --- */
@@ -1461,5 +1467,6 @@
         document.addEventListener('DOMContentLoaded', onReady);
     }
 })();
+
 
 /* --- End app.js --- */

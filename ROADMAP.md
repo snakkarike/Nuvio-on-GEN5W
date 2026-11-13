@@ -19,5 +19,5 @@
 - [x] Test Stremio addon manifest resolution (Cinemeta, Torrentio, CyberFlix, Debrid providers).
 
 ## Milestone 4: Packaging & Vehicle Testing
-- [ ] Implement `tools/build.py` and `tools/package.py` for automated USB & Store ZIP generation.
-- [ ] Validate on Gen5W head unit test bench / vehicle running NEMESIS.
+- [x] Implement `tools/build.py` and `tools/package.py` for automated USB & Store ZIP generation.
+- [x] Validate on Gen5W head unit test bench / vehicle running NEMESIS.

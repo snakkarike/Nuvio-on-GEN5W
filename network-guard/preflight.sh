@@ -1,7 +1,7 @@
 #!/system/bin/sh
 # Read-only checks; installation does not alter the vehicle's modem settings.
 export PATH=/system/bin:/system/xbin:/sbin:/vendor/bin
-case "$(id)" in uid=0\(*) ;; *) echo "Jellyfin network protection requires NEMESIS root installation."; exit 1 ;; esac
+case "$(id)" in uid=0\(*) ;; *) echo "Nuvio network protection requires NEMESIS root installation."; exit 1 ;; esac
 for TOOL in iptables ip6tables ndc ip ps chmod mv dumpsys mkdir rmdir rm sleep cat getprop; do
     command -v "$TOOL" >/dev/null 2>&1 || { echo "Required network tool is missing: $TOOL"; exit 1; }
 done
