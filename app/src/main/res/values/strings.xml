@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nuvio on GEN5W</string>
+    <string name="app_name">Nuvio Auto</string>
     <string name="safety_warning_title">Video Playback Disabled</string>
     <string name="safety_warning_desc">For your safety, video playback is unavailable while the vehicle is in gear or in motion.</string>
     <string name="park_vehicle_notice">Shift to PARK and engage parking brake to resume video.</string>

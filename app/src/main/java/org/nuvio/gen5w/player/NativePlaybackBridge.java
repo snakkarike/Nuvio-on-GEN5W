@@ -41,7 +41,7 @@ public class NativePlaybackBridge {
     public void setPlaybackService(NativePlaybackService service) {
         this.playbackService = service;
         if (this.playbackService != null && this.videoOverlay != null) {
-            this.playbackService.attachSurfaceView(this.videoOverlay.getSurfaceView());
+            this.playbackService.attachPlayerView(this.videoOverlay.getPlayerView());
         }
     }
 

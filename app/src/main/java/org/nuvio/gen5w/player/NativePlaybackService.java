@@ -95,10 +95,31 @@ public class NativePlaybackService extends Service implements AudioManager.OnAud
             @Override
             public void onPlayerError(ExoPlaybackException error) {
                 String errorMsg = "Playback error: " + error.getMessage();
-                Log.e(TAG, errorMsg, error);
+                Throwable cause = error.getCause();
+                String details = cause != null ? cause.getClass().getSimpleName() + ": " + cause.getMessage() : errorMsg;
+                Log.e(TAG, "ExoPlayer error [" + error.type + "]: " + details, error);
+
                 if (eventListener != null) {
-                    eventListener.onError(errorMsg);
+                    eventListener.onError(details);
                 }
+
+                final String userNotice;
+                if (error.type == ExoPlaybackException.TYPE_RENDERER) {
+                    userNotice = "Codec error: Android 4.4 cannot decode this video format (HEVC/x265 unsupported). Please pick an H.264 stream.";
+                } else if (error.type == ExoPlaybackException.TYPE_SOURCE) {
+                    userNotice = "Network/Stream error: Failed to connect to stream source (" + details + ").";
+                } else {
+                    userNotice = "Playback error: " + details;
+                }
+
+                new Handler(Looper.getMainLooper()).post(new Runnable() {
+                    @Override
+                    public void run() {
+                        android.widget.Toast.makeText(getApplicationContext(),
+                            userNotice,
+                            android.widget.Toast.LENGTH_LONG).show();
+                    }
+                });
             }
         });
 
@@ -119,6 +140,12 @@ public class NativePlaybackService extends Service implements AudioManager.OnAud
         this.eventListener = listener;
     }
 
+    public void attachPlayerView(com.google.android.exoplayer2.ui.PlayerView playerView) {
+        if (player != null && playerView != null) {
+            playerView.setPlayer(player);
+        }
+    }
+
     public void attachSurfaceView(SurfaceView surfaceView) {
         if (player != null) {
             player.setVideoSurfaceView(surfaceView);
@@ -136,6 +163,13 @@ public class NativePlaybackService extends Service implements AudioManager.OnAud
             initPlayer();
         }
 
+        // Install TLS 1.2 and modern Mozilla root certificates for HTTPS streams
+        try {
+            javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(VideoTls.build(this));
+        } catch (Throwable t) {
+            Log.w(TAG, "Failed to apply VideoTls SSL socket factory: " + t.getMessage());
+        }
+
         requestAudioFocus();
 
         Uri uri = Uri.parse(streamUrl);
@@ -147,8 +181,8 @@ public class NativePlaybackService extends Service implements AudioManager.OnAud
         DefaultHttpDataSourceFactory httpDataSourceFactory = new DefaultHttpDataSourceFactory(
                 userAgent,
                 null,
-                DefaultHttpDataSource.DEFAULT_CONNECT_TIMEOUT_MILLIS,
-                DefaultHttpDataSource.DEFAULT_READ_TIMEOUT_MILLIS,
+                15000,
+                25000,
                 true
         );
 

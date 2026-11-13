@@ -98,120 +98,122 @@
         };
     }
 
-    // 4. Lightweight ES6 Promise A+ Implementation
-    if (typeof window.Promise !== 'function') {
-        var PENDING = 0, FULFILLED = 1, REJECTED = 2;
+    // 4. Lightweight ES6 Promise A+ Implementation (Strict-mode compliant)
+    var PENDING = 0;
+    var FULFILLED = 1;
+    var REJECTED = 2;
 
-        function PromisePolyfill(executor) {
-            var self = this;
-            self.state = PENDING;
-            self.value = undefined;
-            self.handlers = [];
+    var PromisePolyfill = function(executor) {
+        var self = this;
+        self.state = PENDING;
+        self.value = undefined;
+        self.handlers = [];
 
-            function resolve(result) {
-                if (self.state !== PENDING) return;
-                if (result && (typeof result === 'object' || typeof result === 'function')) {
-                    var then = result.then;
-                    if (typeof then === 'function') {
-                        then.call(result, resolve, reject);
-                        return;
-                    }
-                }
-                self.state = FULFILLED;
-                self.value = result;
-                executeHandlers();
-            }
-
-            function reject(error) {
-                if (self.state !== PENDING) return;
-                self.state = REJECTED;
-                self.value = error;
-                executeHandlers();
-            }
-
-            function executeHandlers() {
-                setTimeout(function() {
-                    for (var i = 0; i < self.handlers.length; i++) {
-                        var handler = self.handlers[i];
-                        if (self.state === FULFILLED) {
-                            if (typeof handler.onFulfilled === 'function') {
-                                try {
-                                    var res = handler.onFulfilled(self.value);
-                                    handler.resolve(res);
-                                } catch (e) {
-                                    handler.reject(e);
-                                }
-                            } else {
-                                handler.resolve(self.value);
-                            }
-                        } else if (self.state === REJECTED) {
-                            if (typeof handler.onRejected === 'function') {
-                                try {
-                                    var errRes = handler.onRejected(self.value);
-                                    handler.resolve(errRes);
-                                } catch (e) {
-                                    handler.reject(e);
-                                }
-                            } else {
-                                handler.reject(self.value);
-                            }
-                        }
-                    }
-                    self.handlers = [];
-                }, 0);
-            }
-
-            self.then = function(onFulfilled, onRejected) {
-                return new PromisePolyfill(function(res, rej) {
-                    self.handlers.push({
-                        onFulfilled: onFulfilled,
-                        onRejected: onRejected,
-                        resolve: res,
-                        reject: rej
-                    });
-                    if (self.state !== PENDING) {
-                        executeHandlers();
-                    }
-                });
-            };
-
-            self.catch = function(onRejected) {
-                return self.then(null, onRejected);
-            };
-
-            try {
-                executor(resolve, reject);
-            } catch (e) {
-                reject(e);
-            }
-        }
-
-        PromisePolyfill.resolve = function(val) {
-            return new PromisePolyfill(function(res) { res(val); });
-        };
-        PromisePolyfill.reject = function(err) {
-            return new PromisePolyfill(function(res, rej) { rej(err); });
-        };
-        PromisePolyfill.all = function(promises) {
-            return new PromisePolyfill(function(resolve, reject) {
-                if (!promises || !promises.length) {
-                    resolve([]);
+        var resolve = function(result) {
+            if (self.state !== PENDING) return;
+            if (result && (typeof result === 'object' || typeof result === 'function')) {
+                var then = result.then;
+                if (typeof then === 'function') {
+                    then.call(result, resolve, reject);
                     return;
                 }
-                var results = [];
-                var count = 0;
-                for (var i = 0; i < promises.length; i++) {
-                    (function(idx) {
-                        PromisePolyfill.resolve(promises[idx]).then(function(val) {
-                            results[idx] = val;
-                            count++;
-                            if (count === promises.length) resolve(results);
-                        }, reject);
-                    })(i);
+            }
+            self.state = FULFILLED;
+            self.value = result;
+            executeHandlers();
+        };
+
+        var reject = function(error) {
+            if (self.state !== PENDING) return;
+            self.state = REJECTED;
+            self.value = error;
+            executeHandlers();
+        };
+
+        var executeHandlers = function() {
+            setTimeout(function() {
+                for (var i = 0; i < self.handlers.length; i++) {
+                    var handler = self.handlers[i];
+                    if (self.state === FULFILLED) {
+                        if (typeof handler.onFulfilled === 'function') {
+                            try {
+                                var res = handler.onFulfilled(self.value);
+                                handler.resolve(res);
+                            } catch (e) {
+                                handler.reject(e);
+                            }
+                        } else {
+                            handler.resolve(self.value);
+                        }
+                    } else if (self.state === REJECTED) {
+                        if (typeof handler.onRejected === 'function') {
+                            try {
+                                var errRes = handler.onRejected(self.value);
+                                handler.resolve(errRes);
+                            } catch (e) {
+                                handler.reject(e);
+                            }
+                        } else {
+                            handler.reject(self.value);
+                        }
+                    }
+                }
+                self.handlers = [];
+            }, 0);
+        };
+
+        self.then = function(onFulfilled, onRejected) {
+            return new PromisePolyfill(function(res, rej) {
+                self.handlers.push({
+                    onFulfilled: onFulfilled,
+                    onRejected: onRejected,
+                    resolve: res,
+                    reject: rej
+                });
+                if (self.state !== PENDING) {
+                    executeHandlers();
                 }
             });
         };
 
+        self.catch = function(onRejected) {
+            return self.then(null, onRejected);
+        };
+
+        try {
+            executor(resolve, reject);
+        } catch (e) {
+            reject(e);
+        }
+    };
+
+    PromisePolyfill.resolve = function(val) {
+        return new PromisePolyfill(function(res) { res(val); });
+    };
+    PromisePolyfill.reject = function(err) {
+        return new PromisePolyfill(function(res, rej) { rej(err); });
+    };
+    PromisePolyfill.all = function(promises) {
+        return new PromisePolyfill(function(resolve, reject) {
+            if (!promises || !promises.length) {
+                resolve([]);
+                return;
+            }
+            var results = [];
+            var count = 0;
+            for (var i = 0; i < promises.length; i++) {
+                (function(idx) {
+                    PromisePolyfill.resolve(promises[idx]).then(function(val) {
+                        results[idx] = val;
+                        count++;
+                        if (count === promises.length) resolve(results);
+                    }, reject);
+                })(i);
+            }
+        });
+    };
+
+    if (typeof window.Promise !== 'function') {
         window.Promise = PromisePolyfill;
     }
 
@@ -309,4 +311,3 @@
     }
 
 })(window);
-

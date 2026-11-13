@@ -133,7 +133,7 @@
         var btnSearch = document.getElementById('btnExecuteSearch');
         var resultsGrid = document.getElementById('search-results-grid');
 
-        function doSearch() {
+        var doSearch = function() {
             var q = (searchInput.value || '').trim();
             if (!q) return;
 
@@ -276,19 +276,41 @@
 
                     var name = s.name || s._addonName || 'Stream';
                     var title = s.title || s.description || 'Direct Stream';
+                    var hasDirectUrl = !!s.url;
+                    var hasDebridConfigured = window.DebridService.hasActiveProvider();
+
+                    var typeBadgeClass = 'stream-addon-badge';
+                    var typeLabel = name;
+                    if (hasDirectUrl) {
+                        typeLabel += ' [Direct HTTP]';
+                    } else if (hasDebridConfigured) {
+                        typeLabel += ' [Debrid Cloud]';
+                    } else {
+                        typeLabel += ' [P2P - Debrid Req.]';
+                        typeBadgeClass += ' warning';
+                    }
+
+                    var isHevc = /hevc|h\.?265|x265/i.test(title);
+                    var isH264 = /h\.?264|x264|avc/i.test(title);
+                    var codecBadge = '';
+                    if (isHevc) {
+                        codecBadge = ' <span class="stream-addon-badge warning" style="background-color:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;">⚠️ x265/HEVC (KitKat Incompatible)</span>';
+                    } else if (isH264) {
+                        codecBadge = ' <span class="stream-addon-badge" style="background-color:#14532d;color:#86efac;border:1px solid #22c55e;">✅ H.264 (Compatible)</span>';
+                    }
 
                     itemEl.innerHTML =
                         '<div class="stream-info">' +
-                            '<span class="stream-addon-badge">' + name + '</span>' +
+                            '<span class="' + typeBadgeClass + '">' + typeLabel + '</span>' + codecBadge +
                             '<div class="stream-title-text">' + title.replace(/\n/g, ' ') + '</div>' +
                         '</div>' +
                         '<button class="btn btn-play-stream">&#9658; Play</button>';
 
-                    (function(streamObj) {
-                        itemEl.querySelector('.btn-play-stream').addEventListener('click', function() {
-                            window.NuvioUI.startPlayback(streamObj);
+                    (function(streamObj, btnEl) {
+                        btnEl.addEventListener('click', function(e) {
+                            window.NuvioUI.startPlayback(streamObj, btnEl);
                         });
-                    })(s);
+                    })(s, itemEl.querySelector('.btn-play-stream'));
 
                     container.appendChild(itemEl);
                 }
@@ -298,14 +320,14 @@
             });
     };
 
-    NuvioUI.prototype.startPlayback = function(streamObj) {
+    NuvioUI.prototype.startPlayback = function(streamObj, btnEl) {
         var self = this;
-        var btn = event.target;
-        btn.textContent = 'Resolving...';
+        var btn = btnEl || (window.event && window.event.target);
+        if (btn) btn.textContent = 'Resolving...';
 
         window.DebridService.resolveStream(streamObj)
             .then(function(resolved) {
-                btn.textContent = 'Playing';
+                if (btn) btn.textContent = 'Playing';
                 // Close detail modal
                 document.getElementById('detailModal').style.display = 'none';
 
@@ -319,7 +341,7 @@
                 self.showPlayerOsd();
             })
             .catch(function(err) {
-                btn.textContent = '\u25BA Play';
+                if (btn) btn.textContent = '\u25BA Play';
                 alert('Playback Error: ' + err.message);
             });
     };
@@ -480,10 +502,23 @@
         var btnSave = document.getElementById('btnSaveSettings');
         var rdInput = document.getElementById('inputRdToken');
         var torboxInput = document.getElementById('inputTorboxToken');
+        var engineInput = document.getElementById('inputEngineUrl');
 
-        btnSave.addEventListener('click', function() {
+        function saveAll() {
             window.DebridService.setRealDebridToken(rdInput.value);
             window.DebridService.setTorboxToken(torboxInput.value);
+            if (engineInput) {
+                window.DebridService.setStremioEngineUrl(engineInput.value);
+            }
+        }
+
+        // Auto-save on blur / input change so tokens are never lost
+        rdInput.addEventListener('change', saveAll);
+        torboxInput.addEventListener('change', saveAll);
+        if (engineInput) engineInput.addEventListener('change', saveAll);
+
+        btnSave.addEventListener('click', function() {
+            saveAll();
             alert('Settings saved successfully.');
         });
     };
@@ -491,8 +526,12 @@
     NuvioUI.prototype.renderSettings = function() {
         var rdInput = document.getElementById('inputRdToken');
         var torboxInput = document.getElementById('inputTorboxToken');
+        var engineInput = document.getElementById('inputEngineUrl');
         rdInput.value = window.DebridService.getRealDebridToken();
         torboxInput.value = window.DebridService.getTorboxToken();
+        if (engineInput) {
+            engineInput.value = window.DebridService.getStremioEngineUrl();
+        }
     };
 
     function formatMs(ms) {

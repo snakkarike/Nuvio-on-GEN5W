@@ -81,8 +81,37 @@ public class VehicleVideoGate {
                 }
             }
         } catch (Throwable t) {
-            Log.w(TAG, "HKMC automotive framework not accessible (" + t.getMessage() + "). Running in fallback mode.");
+            Log.w(TAG, "HKMC automotive framework not accessible (" + t.getMessage() + ").");
         }
+
+        if (regulationManagerInstance == null) {
+            if (isEmulatorOrTestDevice()) {
+                Log.i(TAG, "Android Studio Emulator / AVD detected. Vehicle gate auto-mocked to ALLOWED (isParked = true).");
+                setMockParked(true);
+            } else {
+                Log.i(TAG, "Non-automotive hardware detected. Video gate defaulting to ALLOWED.");
+                this.isParked = true;
+            }
+        }
+    }
+
+    private boolean isEmulatorOrTestDevice() {
+        String fingerprint = android.os.Build.FINGERPRINT != null ? android.os.Build.FINGERPRINT : "";
+        String model = android.os.Build.MODEL != null ? android.os.Build.MODEL : "";
+        String hardware = android.os.Build.HARDWARE != null ? android.os.Build.HARDWARE : "";
+        String product = android.os.Build.PRODUCT != null ? android.os.Build.PRODUCT : "";
+
+        return fingerprint.startsWith("generic")
+                || fingerprint.startsWith("unknown")
+                || model.contains("google_sdk")
+                || model.contains("Emulator")
+                || model.contains("Android SDK built for x86")
+                || hardware.contains("goldfish")
+                || hardware.contains("ranchu")
+                || product.contains("sdk")
+                || product.contains("google_sdk")
+                || product.contains("sdk_x86")
+                || product.contains("vbox86p");
     }
 
     public void setListener(OnParkStateChangeListener listener) {

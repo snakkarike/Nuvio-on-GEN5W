@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Nuvio on GEN5W</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -98,6 +98,10 @@
                     <h3 class="settings-group-title" style="margin-top: 24px;">Torbox API Token</h3>
                     <p class="settings-desc">Optional secondary debrid provider integration.</p>
                     <input type="password" id="inputTorboxToken" class="search-input" placeholder="Paste Torbox API token...">
+
+                    <h3 class="settings-group-title" style="margin-top: 24px;">Local Stremio Streaming Server (Optional)</h3>
+                    <p class="settings-desc">If running the Stremio desktop engine on your laptop or phone hotspot, enter its local address to stream raw P2P torrents without Debrid.</p>
+                    <input type="text" id="inputEngineUrl" class="search-input" placeholder="http://192.168.x.x:11470">
 
                     <div style="margin-top: 24px;">
                         <button class="btn btn-success" id="btnSaveSettings">Save Preferences</button>

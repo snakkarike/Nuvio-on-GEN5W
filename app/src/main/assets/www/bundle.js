@@ -101,120 +101,122 @@
         };
     }
 
-    // 4. Lightweight ES6 Promise A+ Implementation
-    if (typeof window.Promise !== 'function') {
-        var PENDING = 0, FULFILLED = 1, REJECTED = 2;
+    // 4. Lightweight ES6 Promise A+ Implementation (Strict-mode compliant)
+    var PENDING = 0;
+    var FULFILLED = 1;
+    var REJECTED = 2;
 
-        function PromisePolyfill(executor) {
-            var self = this;
-            self.state = PENDING;
-            self.value = undefined;
-            self.handlers = [];
+    var PromisePolyfill = function(executor) {
+        var self = this;
+        self.state = PENDING;
+        self.value = undefined;
+        self.handlers = [];
 
-            function resolve(result) {
-                if (self.state !== PENDING) return;
-                if (result && (typeof result === 'object' || typeof result === 'function')) {
-                    var then = result.then;
-                    if (typeof then === 'function') {
-                        then.call(result, resolve, reject);
-                        return;
-                    }
-                }
-                self.state = FULFILLED;
-                self.value = result;
-                executeHandlers();
-            }
-
-            function reject(error) {
-                if (self.state !== PENDING) return;
-                self.state = REJECTED;
-                self.value = error;
-                executeHandlers();
-            }
-
-            function executeHandlers() {
-                setTimeout(function() {
-                    for (var i = 0; i < self.handlers.length; i++) {
-                        var handler = self.handlers[i];
-                        if (self.state === FULFILLED) {
-                            if (typeof handler.onFulfilled === 'function') {
-                                try {
-                                    var res = handler.onFulfilled(self.value);
-                                    handler.resolve(res);
-                                } catch (e) {
-                                    handler.reject(e);
-                                }
-                            } else {
-                                handler.resolve(self.value);
-                            }
-                        } else if (self.state === REJECTED) {
-                            if (typeof handler.onRejected === 'function') {
-                                try {
-                                    var errRes = handler.onRejected(self.value);
-                                    handler.resolve(errRes);
-                                } catch (e) {
-                                    handler.reject(e);
-                                }
-                            } else {
-                                handler.reject(self.value);
-                            }
-                        }
-                    }
-                    self.handlers = [];
-                }, 0);
-            }
-
-            self.then = function(onFulfilled, onRejected) {
-                return new PromisePolyfill(function(res, rej) {
-                    self.handlers.push({
-                        onFulfilled: onFulfilled,
-                        onRejected: onRejected,
-                        resolve: res,
-                        reject: rej
-                    });
-                    if (self.state !== PENDING) {
-                        executeHandlers();
-                    }
-                });
-            };
-
-            self.catch = function(onRejected) {
-                return self.then(null, onRejected);
-            };
-
-            try {
-                executor(resolve, reject);
-            } catch (e) {
-                reject(e);
-            }
-        }
-
-        PromisePolyfill.resolve = function(val) {
-            return new PromisePolyfill(function(res) { res(val); });
-        };
-        PromisePolyfill.reject = function(err) {
-            return new PromisePolyfill(function(res, rej) { rej(err); });
-        };
-        PromisePolyfill.all = function(promises) {
-            return new PromisePolyfill(function(resolve, reject) {
-                if (!promises || !promises.length) {
-                    resolve([]);
+        var resolve = function(result) {
+            if (self.state !== PENDING) return;
+            if (result && (typeof result === 'object' || typeof result === 'function')) {
+                var then = result.then;
+                if (typeof then === 'function') {
+                    then.call(result, resolve, reject);
                     return;
                 }
-                var results = [];
-                var count = 0;
-                for (var i = 0; i < promises.length; i++) {
-                    (function(idx) {
-                        PromisePolyfill.resolve(promises[idx]).then(function(val) {
-                            results[idx] = val;
-                            count++;
-                            if (count === promises.length) resolve(results);
-                        }, reject);
-                    })(i);
+            }
+            self.state = FULFILLED;
+            self.value = result;
+            executeHandlers();
+        };
+
+        var reject = function(error) {
+            if (self.state !== PENDING) return;
+            self.state = REJECTED;
+            self.value = error;
+            executeHandlers();
+        };
+
+        var executeHandlers = function() {
+            setTimeout(function() {
+                for (var i = 0; i < self.handlers.length; i++) {
+                    var handler = self.handlers[i];
+                    if (self.state === FULFILLED) {
+                        if (typeof handler.onFulfilled === 'function') {
+                            try {
+                                var res = handler.onFulfilled(self.value);
+                                handler.resolve(res);
+                            } catch (e) {
+                                handler.reject(e);
+                            }
+                        } else {
+                            handler.resolve(self.value);
+                        }
+                    } else if (self.state === REJECTED) {
+                        if (typeof handler.onRejected === 'function') {
+                            try {
+                                var errRes = handler.onRejected(self.value);
+                                handler.resolve(errRes);
+                            } catch (e) {
+                                handler.reject(e);
+                            }
+                        } else {
+                            handler.reject(self.value);
+                        }
+                    }
+                }
+                self.handlers = [];
+            }, 0);
+        };
+
+        self.then = function(onFulfilled, onRejected) {
+            return new PromisePolyfill(function(res, rej) {
+                self.handlers.push({
+                    onFulfilled: onFulfilled,
+                    onRejected: onRejected,
+                    resolve: res,
+                    reject: rej
+                });
+                if (self.state !== PENDING) {
+                    executeHandlers();
                 }
             });
         };
 
+        self.catch = function(onRejected) {
+            return self.then(null, onRejected);
+        };
+
+        try {
+            executor(resolve, reject);
+        } catch (e) {
+            reject(e);
+        }
+    };
+
+    PromisePolyfill.resolve = function(val) {
+        return new PromisePolyfill(function(res) { res(val); });
+    };
+    PromisePolyfill.reject = function(err) {
+        return new PromisePolyfill(function(res, rej) { rej(err); });
+    };
+    PromisePolyfill.all = function(promises) {
+        return new PromisePolyfill(function(resolve, reject) {
+            if (!promises || !promises.length) {
+                resolve([]);
+                return;
+            }
+            var results = [];
+            var count = 0;
+            for (var i = 0; i < promises.length; i++) {
+                (function(idx) {
+                    PromisePolyfill.resolve(promises[idx]).then(function(val) {
+                        results[idx] = val;
+                        count++;
+                        if (count === promises.length) resolve(results);
+                    }, reject);
+                })(i);
+            }
+        });
+    };
+
+    if (typeof window.Promise !== 'function') {
         window.Promise = PromisePolyfill;
     }
 
@@ -312,7 +314,6 @@
     }
 
 })(window);
-
 
 /* --- End polyfills.js --- */
 
@@ -485,10 +486,12 @@
 
     var STORAGE_KEY_RD = 'nuvio_gen5w_rd_token';
     var STORAGE_KEY_TORBOX = 'nuvio_gen5w_torbox_token';
+    var STORAGE_KEY_ENGINE = 'nuvio_gen5w_stremio_engine';
 
     function DebridService() {
         this.rdToken = '';
         this.torboxToken = '';
+        this.stremioEngineUrl = '';
         this.loadKeys();
     }
 
@@ -496,6 +499,7 @@
         try {
             this.rdToken = localStorage.getItem(STORAGE_KEY_RD) || '';
             this.torboxToken = localStorage.getItem(STORAGE_KEY_TORBOX) || '';
+            this.stremioEngineUrl = localStorage.getItem(STORAGE_KEY_ENGINE) || '';
         } catch (e) {}
     };
 
@@ -513,6 +517,13 @@
         } catch (e) {}
     };
 
+    DebridService.prototype.setStremioEngineUrl = function(url) {
+        this.stremioEngineUrl = (url || '').trim().replace(/\/$/, '');
+        try {
+            localStorage.setItem(STORAGE_KEY_ENGINE, this.stremioEngineUrl);
+        } catch (e) {}
+    };
+
     DebridService.prototype.getRealDebridToken = function() {
         return this.rdToken;
     };
@@ -521,8 +532,12 @@
         return this.torboxToken;
     };
 
+    DebridService.prototype.getStremioEngineUrl = function() {
+        return this.stremioEngineUrl;
+    };
+
     DebridService.prototype.hasActiveProvider = function() {
-        return !!(this.rdToken || this.torboxToken);
+        return !!(this.rdToken || this.torboxToken || this.stremioEngineUrl);
     };
 
     /**
@@ -560,12 +575,167 @@
     };
 
     /**
+     * Resolves an infoHash using Torbox API v1.
+     */
+    DebridService.prototype.resolveTorboxTorrent = function(infoHash, fileIdx) {
+        var self = this;
+        var token = self.torboxToken;
+        if (!token) {
+            return window.Promise.reject(new Error('Torbox API token is not configured in Settings.'));
+        }
+
+        var magnet = 'magnet:?xt=urn:btih:' + infoHash;
+        var createUrl = 'https://api.torbox.app/v1/api/torrents/createtorrent';
+
+        return window.fetch(createUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: 'magnet=' + encodeURIComponent(magnet),
+            timeout: 12000
+        }).then(function(res) {
+            return res.json();
+        }).then(function(createRes) {
+            var torrentId = null;
+            if (createRes && createRes.data) {
+                torrentId = createRes.data.torrent_id || createRes.data.id;
+            }
+
+            // If createtorrent did not return an ID (e.g. already added), search user torrents
+            var getTorrentIdPromise;
+            if (torrentId) {
+                getTorrentIdPromise = window.Promise.resolve(torrentId);
+            } else {
+                getTorrentIdPromise = window.fetch('https://api.torbox.app/v1/api/torrents/mylist?bypass_cache=true', {
+                    headers: { 'Authorization': 'Bearer ' + token },
+                    timeout: 10000
+                }).then(function(r) { return r.json(); })
+                .then(function(listRes) {
+                    if (listRes && listRes.data && listRes.data.length) {
+                        var targetHash = infoHash.toLowerCase();
+                        for (var i = 0; i < listRes.data.length; i++) {
+                            var t = listRes.data[i];
+                            if (t.hash && t.hash.toLowerCase() === targetHash) {
+                                return t.id || t.torrent_id;
+                            }
+                        }
+                    }
+                    var msg = (createRes && createRes.detail) ? createRes.detail : 'Could not register torrent on Torbox.';
+                    throw new Error('Torbox: ' + msg);
+                });
+            }
+
+            return getTorrentIdPromise.then(function(tid) {
+                // Request torrent details to choose the main video file
+                return window.fetch('https://api.torbox.app/v1/api/torrents/mylist?id=' + encodeURIComponent(tid), {
+                    headers: { 'Authorization': 'Bearer ' + token },
+                    timeout: 10000
+                }).then(function(r) { return r.json(); })
+                .then(function(detailRes) {
+                    var selectedFileId = fileIdx !== undefined ? fileIdx : null;
+
+                    var itemData = detailRes && detailRes.data ?
+                        (Array.isArray(detailRes.data) ? detailRes.data[0] : detailRes.data) : null;
+
+                    if (itemData && itemData.files && itemData.files.length > 0) {
+                        var files = itemData.files;
+                        var largest = files[0];
+                        for (var f = 1; f < files.length; f++) {
+                            if ((files[f].size || 0) > (largest.size || 0)) {
+                                largest = files[f];
+                            }
+                        }
+                        selectedFileId = largest.id !== undefined ? largest.id : 0;
+                    }
+
+                    var reqDlUrl = 'https://api.torbox.app/v1/api/torrents/requestdl?token=' +
+                        encodeURIComponent(token) + '&torrent_id=' + encodeURIComponent(tid) +
+                        (selectedFileId !== null ? '&file_id=' + encodeURIComponent(selectedFileId) : '') +
+                        '&zip=false';
+
+                    return window.fetch(reqDlUrl, {
+                        headers: { 'Authorization': 'Bearer ' + token },
+                        timeout: 12000
+                    });
+                }).then(function(r) { return r.json(); })
+                .then(function(dlRes) {
+                    if (!dlRes || !dlRes.success || !dlRes.data) {
+                        var errDetail = (dlRes && dlRes.detail) ? dlRes.detail : 'Torrent is not yet cached on Torbox.';
+                        throw new Error('Torbox: ' + errDetail);
+                    }
+
+                    var streamUrl = typeof dlRes.data === 'string' ? dlRes.data : (dlRes.data.url || dlRes.data.download_url);
+                    if (!streamUrl) {
+                        throw new Error('Torbox did not return a valid playable stream URL.');
+                    }
+
+                    return {
+                        url: streamUrl,
+                        filename: 'Torbox Stream',
+                        headers: {}
+                    };
+                });
+            });
+        });
+    };
+
+    /**
+     * Resolves an infoHash using Real-Debrid API.
+     */
+    DebridService.prototype.resolveRealDebridTorrent = function(infoHash) {
+        var self = this;
+        var addMagnetUrl = 'https://api.real-debrid.com/rest/1.0/torrents/addMagnet';
+        var magnetBody = 'magnet=magnet:?xt=urn:btih:' + infoHash;
+
+        return window.fetch(addMagnetUrl, {
+            method: 'POST',
+            headers: {
+                'Authorization': 'Bearer ' + self.rdToken,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: magnetBody,
+            timeout: 10000
+        }).then(function(res) {
+            return res.json();
+        }).then(function(torrentData) {
+            if (!torrentData || !torrentData.id) {
+                throw new Error('Failed to register torrent with Real-Debrid.');
+            }
+            var torrentId = torrentData.id;
+            var selectFileUrl = 'https://api.real-debrid.com/rest/1.0/torrents/selectFiles/' + torrentId;
+            return window.fetch(selectFileUrl, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer ' + self.rdToken,
+                    'Content-Type': 'application/x-www-form-urlencoded'
+                },
+                body: 'files=all',
+                timeout: 8000
+            }).then(function() {
+                var infoUrl = 'https://api.real-debrid.com/rest/1.0/torrents/info/' + torrentId;
+                return window.fetch(infoUrl, {
+                    headers: { 'Authorization': 'Bearer ' + self.rdToken }
+                });
+            }).then(function(res) {
+                return res.json();
+            }).then(function(info) {
+                if (info.links && info.links.length > 0) {
+                    return self.unrestrictRealDebrid(info.links[0]);
+                }
+                throw new Error('Torrent is not yet cached on Real-Debrid.');
+            });
+        });
+    };
+
+    /**
      * Resolves a Stremio stream item into a direct HTTP playable stream.
      */
     DebridService.prototype.resolveStream = function(streamItem) {
         var self = this;
 
-        // 1. Direct URL already present (e.g. Torrentio-RD pre-resolved or direct HTTP stream)
+        // 1. Direct URL already present (e.g. Torrentio-RD/Torbox pre-resolved or direct HTTP stream)
         if (streamItem.url) {
             // If it's a debrid unrestrict link (like real-debrid.com/d/...), unrestrict it
             if (streamItem.url.indexOf('real-debrid.com/d/') !== -1 && self.rdToken) {
@@ -579,54 +749,33 @@
             });
         }
 
-        // 2. InfoHash provided (Torrent needing Debrid resolution)
+        // 2. InfoHash provided (Torrent needing Debrid or Stremio Engine resolution)
         if (streamItem.infoHash) {
-            if (!self.rdToken) {
-                return window.Promise.reject(new Error('This stream requires a Real-Debrid token to stream on Gen5W.'));
+            // Check if local/remote Stremio Streaming Server is configured
+            if (self.stremioEngineUrl) {
+                var fileIndex = streamItem.fileIdx !== undefined ? streamItem.fileIdx : 0;
+                var engineStreamUrl = self.stremioEngineUrl + '/' + streamItem.infoHash + '/' + fileIndex;
+                return window.Promise.resolve({
+                    url: engineStreamUrl,
+                    filename: streamItem.title || 'P2P Stream via Stremio Engine',
+                    headers: {}
+                });
             }
 
-            // Real-Debrid torrent addition and resolution flow
-            var addMagnetUrl = 'https://api.real-debrid.com/rest/1.0/torrents/addMagnet';
-            var magnetBody = 'magnet=magnet:?xt=urn:btih:' + streamItem.infoHash;
+            // Check Torbox if configured
+            if (self.torboxToken) {
+                return self.resolveTorboxTorrent(streamItem.infoHash, streamItem.fileIdx);
+            }
 
-            return window.fetch(addMagnetUrl, {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'Bearer ' + self.rdToken,
-                    'Content-Type': 'application/x-www-form-urlencoded'
-                },
-                body: magnetBody,
-                timeout: 10000
-            }).then(function(res) {
-                return res.json();
-            }).then(function(torrentData) {
-                if (!torrentData || !torrentData.id) {
-                    throw new Error('Failed to register torrent with Real-Debrid.');
-                }
-                var torrentId = torrentData.id;
-                var selectFileUrl = 'https://api.real-debrid.com/rest/1.0/torrents/selectFiles/' + torrentId;
-                return window.fetch(selectFileUrl, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': 'Bearer ' + self.rdToken,
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: 'files=all',
-                    timeout: 8000
-                }).then(function() {
-                    var infoUrl = 'https://api.real-debrid.com/rest/1.0/torrents/info/' + torrentId;
-                    return window.fetch(infoUrl, {
-                        headers: { 'Authorization': 'Bearer ' + self.rdToken }
-                    });
-                }).then(function(res) {
-                    return res.json();
-                }).then(function(info) {
-                    if (info.links && info.links.length > 0) {
-                        return self.unrestrictRealDebrid(info.links[0]);
-                    }
-                    throw new Error('Torrent is not yet cached on Real-Debrid.');
-                });
-            });
+            // Check Real-Debrid if configured
+            if (self.rdToken) {
+                return self.resolveRealDebridTorrent(streamItem.infoHash);
+            }
+
+            return window.Promise.reject(new Error(
+                'P2P BitTorrent stream detected. Gen5W car hardware (1GB RAM) cannot run a BitTorrent engine on-device to protect flash storage and BlueLink cellular data.\n' +
+                'Please configure your Torbox or Real-Debrid token in Settings, or install Torrentio with Debrid pre-configured.'
+            ));
         }
 
         return window.Promise.reject(new Error('Unsupported stream format.'));
@@ -648,6 +797,72 @@
 (function(window) {
     'use strict';
 
+    var FALLBACK_MOVIES = [
+        {
+            id: 'tt1254207',
+            type: 'movie',
+            name: 'Big Buck Bunny',
+            year: '2008',
+            imdbRating: '7.3',
+            poster: 'https://images.metahub.space/poster/medium/tt1254207/img',
+            description: 'A large and lovable rabbit deals with bullying forest creatures in this iconic open-source animated film.',
+            genres: ['Animation', 'Comedy', 'Short']
+        },
+        {
+            id: 'tt2285752',
+            type: 'movie',
+            name: 'Tears of Steel',
+            year: '2012',
+            imdbRating: '6.5',
+            poster: 'https://images.metahub.space/poster/medium/tt2285752/img',
+            description: 'In a dystopian future, a group of warriors and scientists gather at the Oude Kerk in Amsterdam to stage a crucial event from the past.',
+            genres: ['Action', 'Sci-Fi', 'Short']
+        },
+        {
+            id: 'tt1727587',
+            type: 'movie',
+            name: 'Sintel',
+            year: '2010',
+            imdbRating: '7.4',
+            poster: 'https://images.metahub.space/poster/medium/tt1727587/img',
+            description: 'A lonely young woman searches for a baby dragon she nursed back to health.',
+            genres: ['Animation', 'Adventure', 'Fantasy']
+        },
+        {
+            id: 'tt0807840',
+            type: 'movie',
+            name: 'Elephants Dream',
+            year: '2006',
+            imdbRating: '6.8',
+            poster: 'https://images.metahub.space/poster/medium/tt0807840/img',
+            description: 'Two strange men explore the giant, complex machine in which they seem to live.',
+            genres: ['Animation', 'Sci-Fi', 'Short']
+        },
+        {
+            id: 'tt4947474',
+            type: 'movie',
+            name: 'Cosmos Laundromat',
+            year: '2015',
+            imdbRating: '7.2',
+            poster: 'https://images.metahub.space/poster/medium/tt4947474/img',
+            description: 'On a desolate island, a suicidal sheep named Franck meets a mysterious salesman who offers him the gift of a lifetime.',
+            genres: ['Animation', 'Comedy', 'Fantasy']
+        }
+    ];
+
+    var FALLBACK_SERIES = [
+        {
+            id: 'tt1695360',
+            type: 'series',
+            name: 'Pioneer One',
+            year: '2010',
+            imdbRating: '6.6',
+            poster: 'https://images.metahub.space/poster/medium/tt1695360/img',
+            description: 'An object from space spreads radiation over North America, turning out to be a Soviet space capsule.',
+            genres: ['Drama', 'Sci-Fi']
+        }
+    ];
+
     function StremioApi() {}
 
     /**
@@ -661,13 +876,21 @@
         }
         url += '.json';
 
-        return window.fetch(url, { timeout: 10000 })
+        return window.fetch(url, { timeout: 8000 })
             .then(function(res) {
                 if (!res.ok) throw new Error('Catalog request failed with status ' + res.status);
                 return res.json();
             })
             .then(function(data) {
-                return (data && data.metas) ? data.metas : [];
+                var items = (data && data.metas) ? data.metas : [];
+                if (!items || items.length === 0) {
+                    return type === 'series' ? FALLBACK_SERIES : FALLBACK_MOVIES;
+                }
+                return items;
+            })
+            .catch(function(err) {
+                console.warn('Network catalog failed, using fallback library:', err);
+                return type === 'series' ? FALLBACK_SERIES : FALLBACK_MOVIES;
             });
     };
 
@@ -696,13 +919,20 @@
         var baseUrl = transportUrl.replace(/\/manifest\.json$/, '');
         var url = baseUrl + '/meta/' + encodeURIComponent(type) + '/' + encodeURIComponent(id) + '.json';
 
-        return window.fetch(url, { timeout: 10000 })
+        return window.fetch(url, { timeout: 8000 })
             .then(function(res) {
                 if (!res.ok) throw new Error('Meta fetch failed with status ' + res.status);
                 return res.json();
             })
             .then(function(data) {
                 return (data && data.meta) ? data.meta : null;
+            })
+            .catch(function() {
+                var pool = (type === 'series' ? FALLBACK_SERIES : FALLBACK_MOVIES);
+                for (var i = 0; i < pool.length; i++) {
+                    if (pool[i].id === id) return pool[i];
+                }
+                return null;
             });
     };
 
@@ -748,6 +978,30 @@
 
         return window.Promise.all(promises).then(function(results) {
             var combined = [];
+
+            // Built-in Open Domain Direct HTTP Streams for zero-debrid testing
+            if (id === 'tt1254207' || (id && id.indexOf('tt1254207') !== -1)) { // Big Buck Bunny
+                combined.push({
+                    name: 'Public Stream (No Debrid Needed)',
+                    title: 'Big Buck Bunny (1080p MP4 Direct HTTP)',
+                    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+                    _addonName: 'Open Public Media'
+                });
+                combined.push({
+                    name: 'HLS Stream (No Debrid Needed)',
+                    title: 'Adaptive HLS Multi-Bitrate (.m3u8)',
+                    url: 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
+                    _addonName: 'Open Public Media'
+                });
+            } else if (id === 'tt2285752') { // Tears of Steel
+                combined.push({
+                    name: 'Public Stream (No Debrid Needed)',
+                    title: 'Tears of Steel (1080p MP4 Direct HTTP)',
+                    url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+                    _addonName: 'Open Public Media'
+                });
+            }
+
             for (var i = 0; i < results.length; i++) {
                 combined = combined.concat(results[i]);
             }
@@ -1071,7 +1325,7 @@
         var btnSearch = document.getElementById('btnExecuteSearch');
         var resultsGrid = document.getElementById('search-results-grid');
 
-        function doSearch() {
+        var doSearch = function() {
             var q = (searchInput.value || '').trim();
             if (!q) return;
 
@@ -1214,19 +1468,41 @@
 
                     var name = s.name || s._addonName || 'Stream';
                     var title = s.title || s.description || 'Direct Stream';
+                    var hasDirectUrl = !!s.url;
+                    var hasDebridConfigured = window.DebridService.hasActiveProvider();
+
+                    var typeBadgeClass = 'stream-addon-badge';
+                    var typeLabel = name;
+                    if (hasDirectUrl) {
+                        typeLabel += ' [Direct HTTP]';
+                    } else if (hasDebridConfigured) {
+                        typeLabel += ' [Debrid Cloud]';
+                    } else {
+                        typeLabel += ' [P2P - Debrid Req.]';
+                        typeBadgeClass += ' warning';
+                    }
+
+                    var isHevc = /hevc|h\.?265|x265/i.test(title);
+                    var isH264 = /h\.?264|x264|avc/i.test(title);
+                    var codecBadge = '';
+                    if (isHevc) {
+                        codecBadge = ' <span class="stream-addon-badge warning" style="background-color:#7f1d1d;color:#fca5a5;border:1px solid #ef4444;">⚠️ x265/HEVC (KitKat Incompatible)</span>';
+                    } else if (isH264) {
+                        codecBadge = ' <span class="stream-addon-badge" style="background-color:#14532d;color:#86efac;border:1px solid #22c55e;">✅ H.264 (Compatible)</span>';
+                    }
 
                     itemEl.innerHTML =
                         '<div class="stream-info">' +
-                            '<span class="stream-addon-badge">' + name + '</span>' +
+                            '<span class="' + typeBadgeClass + '">' + typeLabel + '</span>' + codecBadge +
                             '<div class="stream-title-text">' + title.replace(/\n/g, ' ') + '</div>' +
                         '</div>' +
                         '<button class="btn btn-play-stream">&#9658; Play</button>';
 
-                    (function(streamObj) {
-                        itemEl.querySelector('.btn-play-stream').addEventListener('click', function() {
-                            window.NuvioUI.startPlayback(streamObj);
+                    (function(streamObj, btnEl) {
+                        btnEl.addEventListener('click', function(e) {
+                            window.NuvioUI.startPlayback(streamObj, btnEl);
                         });
-                    })(s);
+                    })(s, itemEl.querySelector('.btn-play-stream'));
 
                     container.appendChild(itemEl);
                 }
@@ -1236,14 +1512,14 @@
             });
     };
 
-    NuvioUI.prototype.startPlayback = function(streamObj) {
+    NuvioUI.prototype.startPlayback = function(streamObj, btnEl) {
         var self = this;
-        var btn = event.target;
-        btn.textContent = 'Resolving...';
+        var btn = btnEl || (window.event && window.event.target);
+        if (btn) btn.textContent = 'Resolving...';
 
         window.DebridService.resolveStream(streamObj)
             .then(function(resolved) {
-                btn.textContent = 'Playing';
+                if (btn) btn.textContent = 'Playing';
                 // Close detail modal
                 document.getElementById('detailModal').style.display = 'none';
 
@@ -1257,7 +1533,7 @@
                 self.showPlayerOsd();
             })
             .catch(function(err) {
-                btn.textContent = '\u25BA Play';
+                if (btn) btn.textContent = '\u25BA Play';
                 alert('Playback Error: ' + err.message);
             });
     };
@@ -1418,10 +1694,23 @@
         var btnSave = document.getElementById('btnSaveSettings');
         var rdInput = document.getElementById('inputRdToken');
         var torboxInput = document.getElementById('inputTorboxToken');
+        var engineInput = document.getElementById('inputEngineUrl');
 
-        btnSave.addEventListener('click', function() {
+        function saveAll() {
             window.DebridService.setRealDebridToken(rdInput.value);
             window.DebridService.setTorboxToken(torboxInput.value);
+            if (engineInput) {
+                window.DebridService.setStremioEngineUrl(engineInput.value);
+            }
+        }
+
+        // Auto-save on blur / input change so tokens are never lost
+        rdInput.addEventListener('change', saveAll);
+        torboxInput.addEventListener('change', saveAll);
+        if (engineInput) engineInput.addEventListener('change', saveAll);
+
+        btnSave.addEventListener('click', function() {
+            saveAll();
             alert('Settings saved successfully.');
         });
     };
@@ -1429,8 +1718,12 @@
     NuvioUI.prototype.renderSettings = function() {
         var rdInput = document.getElementById('inputRdToken');
         var torboxInput = document.getElementById('inputTorboxToken');
+        var engineInput = document.getElementById('inputEngineUrl');
         rdInput.value = window.DebridService.getRealDebridToken();
         torboxInput.value = window.DebridService.getTorboxToken();
+        if (engineInput) {
+            engineInput.value = window.DebridService.getStremioEngineUrl();
+        }
     };
 
     function formatMs(ms) {
@@ -1455,18 +1748,33 @@
 (function() {
     'use strict';
 
+    var initialized = false;
+
     function onReady() {
-        if (window.NuvioUI && window.NuvioUI.init) {
-            window.NuvioUI.init();
+        if (initialized) return;
+        initialized = true;
+
+        try {
+            console.log('Nuvio UI Bootstrap: viewport ' + window.innerWidth + 'x' + window.innerHeight + ', screen ' + screen.width + 'x' + screen.height);
+            if (window.NuvioUI && window.NuvioUI.init) {
+                window.NuvioUI.init();
+            }
+        } catch (e) {
+            console.error('Nuvio bootstrap error:', e);
+            if (window.NativePlayer && window.NativePlayer.log) {
+                try {
+                    window.NativePlayer.log('Nuvio bootstrap error: ' + (e.message || e));
+                } catch (ignored) {}
+            }
         }
     }
 
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        setTimeout(onReady, 1);
-    } else {
+    // On KitKat WebView, invoke on ready or immediately after document body is present
+    if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', onReady);
     }
+    // Safety fallback: ensure execution is never blocked by dropped DOM events
+    setTimeout(onReady, 100);
 })();
-
 
 /* --- End app.js --- */

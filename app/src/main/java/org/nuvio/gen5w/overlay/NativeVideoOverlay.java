@@ -4,22 +4,29 @@ import android.content.Context;
 import android.graphics.Color;
 import android.util.AttributeSet;
 import android.view.Gravity;
-import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
+import com.google.android.exoplayer2.ui.PlayerView;
+
 import org.nuvio.gen5w.R;
 
 /**
- * NativeVideoOverlay hosts the hardware-accelerated SurfaceView for ExoPlayer
+ * NativeVideoOverlay hosts ExoPlayer's hardware-accelerated PlayerView
  * layered on top of the WebView, along with an automotive safety interlock screen
  * that blocks video display whenever the vehicle is unparked.
  */
 public class NativeVideoOverlay extends FrameLayout {
+
+    public interface CloseListener {
+        void onClose();
+    }
 
     public enum AspectRatioMode {
         FIT,
@@ -27,16 +34,15 @@ public class NativeVideoOverlay extends FrameLayout {
         STRETCH
     }
 
-    private SurfaceView surfaceView;
-    private FrameLayout videoSurfaceContainer;
+    private PlayerView playerView;
     private LinearLayout safetyWarningContainer;
     private TextView safetyTitleText;
     private TextView safetyDescText;
+    private Button backButton;
+    private CloseListener closeListener;
 
     private boolean isParked = true;
     private AspectRatioMode aspectRatioMode = AspectRatioMode.FIT;
-    private int videoWidth = 0;
-    private int videoHeight = 0;
 
     public NativeVideoOverlay(Context context) {
         super(context);
@@ -53,27 +59,51 @@ public class NativeVideoOverlay extends FrameLayout {
         init(context);
     }
 
+    public void setCloseListener(CloseListener listener) {
+        this.closeListener = listener;
+    }
+
     private void init(Context context) {
         setBackgroundColor(Color.BLACK);
+        setClickable(true);
+        setFocusable(true);
 
-        // 1. SurfaceView container for video
-        videoSurfaceContainer = new FrameLayout(context);
-        LayoutParams surfaceContainerParams = new LayoutParams(
+        // 1. ExoPlayer PlayerView (handles Surface lifecycle, aspect ratio, buffering spinner & controls)
+        playerView = new PlayerView(context);
+        playerView.setUseController(true);
+        playerView.setShowBuffering(PlayerView.SHOW_BUFFERING_ALWAYS);
+        playerView.setKeepScreenOn(true);
+        LayoutParams playerParams = new LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 Gravity.CENTER
         );
-        addView(videoSurfaceContainer, surfaceContainerParams);
+        addView(playerView, playerParams);
 
-        surfaceView = new SurfaceView(context);
-        LayoutParams surfaceParams = new LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                Gravity.CENTER
+        // 2. "Back to Browse" Button pinned to top-left
+        backButton = new Button(context);
+        backButton.setText("← Back to Browse");
+        backButton.setTextColor(Color.WHITE);
+        backButton.setTextSize(14);
+        backButton.setBackgroundColor(Color.parseColor("#CC12131A"));
+        backButton.setPadding(dp(14), dp(8), dp(14), dp(8));
+        backButton.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (closeListener != null) {
+                    closeListener.onClose();
+                }
+            }
+        });
+        LayoutParams backParams = new LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                dp(44),
+                Gravity.TOP | Gravity.START
         );
-        videoSurfaceContainer.addView(surfaceView, surfaceParams);
+        backParams.setMargins(dp(16), dp(16), 0, 0);
+        addView(backButton, backParams);
 
-        // 2. Safety Warning Screen
+        // 3. Safety Warning Screen
         safetyWarningContainer = new LinearLayout(context);
         safetyWarningContainer.setOrientation(LinearLayout.VERTICAL);
         safetyWarningContainer.setGravity(Gravity.CENTER);
@@ -128,8 +158,12 @@ public class NativeVideoOverlay extends FrameLayout {
         safetyWarningContainer.setVisibility(View.GONE);
     }
 
-    public SurfaceView getSurfaceView() {
-        return surfaceView;
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    public PlayerView getPlayerView() {
+        return playerView;
     }
 
     public void setVehicleParked(boolean parked) {
@@ -139,10 +173,10 @@ public class NativeVideoOverlay extends FrameLayout {
             public void run() {
                 if (isParked) {
                     safetyWarningContainer.setVisibility(View.GONE);
-                    surfaceView.setVisibility(View.VISIBLE);
+                    playerView.setVisibility(View.VISIBLE);
                 } else {
                     safetyWarningContainer.setVisibility(View.VISIBLE);
-                    surfaceView.setVisibility(View.INVISIBLE);
+                    playerView.setVisibility(View.INVISIBLE);
                 }
             }
         });
@@ -153,14 +187,7 @@ public class NativeVideoOverlay extends FrameLayout {
     }
 
     public void setVideoSize(int width, int height) {
-        this.videoWidth = width;
-        this.videoHeight = height;
-        post(new Runnable() {
-            @Override
-            public void run() {
-                adjustAspectRatio();
-            }
-        });
+        // Video sizing is managed automatically by PlayerView and AspectRatioFrameLayout
     }
 
     public void setAspectRatioMode(AspectRatioMode mode) {
@@ -168,56 +195,20 @@ public class NativeVideoOverlay extends FrameLayout {
         post(new Runnable() {
             @Override
             public void run() {
-                adjustAspectRatio();
+                if (playerView == null) return;
+                switch (aspectRatioMode) {
+                    case FILL:
+                        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_ZOOM);
+                        break;
+                    case STRETCH:
+                        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FILL);
+                        break;
+                    case FIT:
+                    default:
+                        playerView.setResizeMode(AspectRatioFrameLayout.RESIZE_MODE_FIT);
+                        break;
+                }
             }
         });
     }
-
-    private void adjustAspectRatio() {
-        if (videoWidth <= 0 || videoHeight <= 0) {
-            return;
-        }
-
-        int containerWidth = getWidth();
-        int containerHeight = getHeight();
-        if (containerWidth <= 0 || containerHeight <= 0) {
-            return;
-        }
-
-        LayoutParams params = (LayoutParams) surfaceView.getLayoutParams();
-
-        switch (aspectRatioMode) {
-            case FILL:
-                // Scale to fill, cropping outside bounds
-                float ratioFill = Math.max((float) containerWidth / videoWidth, (float) containerHeight / videoHeight);
-                params.width = (int) (videoWidth * ratioFill);
-                params.height = (int) (videoHeight * ratioFill);
-                break;
-
-            case STRETCH:
-                // Stretch to container
-                params.width = ViewGroup.LayoutParams.MATCH_PARENT;
-                params.height = ViewGroup.LayoutParams.MATCH_PARENT;
-                break;
-
-            case FIT:
-            default:
-                // Fit inside letterbox/pillarbox
-                float ratioFit = Math.min((float) containerWidth / videoWidth, (float) containerHeight / videoHeight);
-                params.width = (int) (videoWidth * ratioFit);
-                params.height = (int) (videoHeight * ratioFit);
-                break;
-        }
-
-        params.gravity = Gravity.CENTER;
-        surfaceView.setLayoutParams(params);
-        surfaceView.requestLayout();
-    }
-
-    @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        adjustAspectRatio();
-    }
 }
-

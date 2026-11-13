@@ -1,7 +1,8 @@
 [nemesis]
 version=1.1
 id=nuvio.gen5w
-name=Nuvio on GEN5W
+name=Nuvio Auto
+author=Saurabh Nakkarike (https://github.com/snakkarike)
 type=application,service
 package-version=1.0.0
 short-desc=Nuvio: Stremio-compatible streaming & debrid player.
