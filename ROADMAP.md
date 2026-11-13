@@ -12,11 +12,11 @@
 - [x] Test local HTTP stream playback over the native ExoPlayer overlay with vehicle park checking.
 
 ## Milestone 3: Nuvio Frontend Integration
-- [ ] Pull `NuvioMedia/NuvioTVSmart` / `NuvioWeb` core interface.
-- [ ] Create Babel/Webpack build pipeline targeting ES5 for Android 4.4 Chromium 33.
-- [ ] Polyfill Fetch, Promises, Crypto, and URLSearchParams for KitKat.
-- [ ] Replace HTML5 `<video>` element with `window.NativePlayer.load(streamData)` bridge call.
-- [ ] Test Stremio addon manifest resolution (Cinemeta, Torrentio, CyberFlix, Debrid providers).
+- [x] Pull `NuvioMedia/NuvioTVSmart` / `NuvioWeb` core interface.
+- [x] Create Babel/Webpack build pipeline targeting ES5 for Android 4.4 Chromium 33.
+- [x] Polyfill Fetch, Promises, Crypto, and URLSearchParams for KitKat.
+- [x] Replace HTML5 `<video>` element with `window.NativePlayer.load(streamData)` bridge call.
+- [x] Test Stremio addon manifest resolution (Cinemeta, Torrentio, CyberFlix, Debrid providers).
 
 ## Milestone 4: Packaging & Vehicle Testing
 - [ ] Implement `tools/build.py` and `tools/package.py` for automated USB & Store ZIP generation.
