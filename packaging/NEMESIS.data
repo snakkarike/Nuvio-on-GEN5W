@@ -1,0 +1,26 @@
+[nemesis]
+version=1.1
+id=nuvio.gen5w
+name=Nuvio on GEN5W
+type=application,service
+package-version=1.0.0
+short-desc=Nuvio: Stremio-compatible streaming & debrid player.
+detailed-desc=Requires the Gen5 codec patch, then KeyBORD. Stream your media libraries, addons and debrid providers through NEMESIS on Gen5W. Parked video enforcement and Wi-Fi modem protection included.
+os=any
+models=any
+depends=media.codecs@>=2.1,keyboard.hackers@>=2.0.1,keyboard.activate@>=2.0.1
+preinstall=scripts/pre.sh
+preuninstall=guard/preuninstall.sh
+
+[app.0]
+kind=apk
+path=app/Nuvio-on-GEN5W.apk
+package=org.nuvio.gen5w
+component=org.nuvio.gen5w/org.nuvio.mobile.MainActivity
+
+[service.0]
+name=nuvio-network
+kind=sh
+path=guard/netguard.sh
+uid=root
+mode=restart
