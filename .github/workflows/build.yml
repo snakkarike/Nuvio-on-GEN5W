@@ -1,0 +1,97 @@
+name: Build Nuvio Auto APK and NEMESIS USB Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ['v*']
+
+jobs:
+  build:
+    name: Build APK and Package NEMESIS Installer
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        shell: bash
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-33' 'build-tools;33.0.1'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '7.6.6'
+
+      - name: Build Android APK
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Package NEMESIS USB and Store Bundle
+        shell: bash
+        run: |
+          python3 tools/package.py --apk app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Export clean source archive without Git history
+        shell: bash
+        run: |
+          version=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle)
+          if [ -z "$version" ]; then version="1.0.0"; fi
+          git archive --format=zip --output="dist/Nuvio-gen5-hmg-nemesis-v${version}-Source.zip" HEAD
+          python3 -c "import zipfile; z=zipfile.ZipFile('dist/Nuvio-gen5-hmg-nemesis-v${version}-Source.zip'); assert z.testzip() is None and all(not p.startswith('.git/') for p in z.namelist())"
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Nuvio-gen5-hmg-nemesis-v1.0.0-Build-${{ github.run_number }}
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            dist/*.zip
+            dist/packages/*.zip
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n "s/.*versionName '\([^']*\)'.*/\1/p" app/build.gradle)
+          if [ -z "$version" ]; then version="1.0.0"; fi
+          tag="v${version}"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          usb_zip="dist/Nuvio-gen5-hmg-nemesis-v${version}-USB-Installer.zip"
+          src_zip="dist/Nuvio-gen5-hmg-nemesis-v${version}-Source.zip"
+
+          echo "Publishing release $tag with $usb_zip and $src_zip..."
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists; updating release notes and assets..."
+            gh release upload "$tag" "$usb_zip" "$src_zip" --clobber
+            gh release edit "$tag" --title "Nuvio Auto $tag" --notes-file CHANGELOG.md
+          else
+            echo "Creating new release $tag..."
+            gh release create "$tag" \
+              "$usb_zip" \
+              "$src_zip" \
+              --title "Nuvio Auto $tag" \
+              --notes-file CHANGELOG.md \
+              --target "${GITHUB_SHA}"
+          fi
