@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.2] - Unreleased
+
+### 🌐 Cloud Synchronization & Extended Nuvio APIs (In Progress)
+- **Automatic Token Refresh**: Seamless session renewal using `POST /auth/v1/token?grant_type=refresh_token` to eliminate unexpected session timeouts on vehicle head units.
+- **"My Library" Watchlist Tab**: Native browsing and management of saved movies and series (`GET /rest/v1/library_items`) with direct "+ Library" / "✓ In Library" toggling on detail views.
+- **Continue Watching Dismissal**: Ability to dismiss or delete completed/abandoned titles from the cloud resume carousel (`DELETE /rest/v1/watch_progress`).
+- **Profile Cloud Preferences**: Synchronization of default audio soundtrack and subtitle language preferences across devices (`/rest/v1/profile_settings`).
+- **Bi-Directional Addon Sync**: Pushing locally added addon manifests directly to the user's Nuvio cloud account.
+
+---
+
+## [1.0.1] - 2026-11-15
+
+### 🎨 Material Design 3 (M3) Native Theme Engine
+- **Native M3 Tonal Palette System (`ThemeManager.java`)**: Complete zero-dependency implementation of Google's Material Design 3 design system for Android 4.4 KitKat single-DEX (< 64K methods).
+- **6 Built-in Automotive Palettes**: One-tap live theme switching under *Settings*:
+  - **Nuvio Classic** (Default — deep purple `#141218` surface with `#D0BCFF` primary accent)
+  - **Ocean Blue** (Deep blue / cobalt theme)
+  - **Ioniq Teal** (Matches Hyundai EV teal dashboard accents)
+  - **Kia Crimson** (Matches Kia sporty red/black cockpits)
+  - **Genesis Copper** (Matches Genesis luxury copper styling)
+  - **Daylight** (High-contrast light theme for bright direct sunlight)
+- **Canvas-based Custom M3 Switch (`M3Switch.java`)**:
+  - Implemented mathematical Canvas rendering (`drawRoundRect` for 52dp × 32dp stadium track and `drawCircle` for 16dp/24dp morphing thumbs).
+  - Resolved KitKat Dalvik bug where default Holo toggle switches compressed and stretched custom thumb drawables outside the track bounds.
+  - Added high-contrast automotive rotary knob focus indicators for jog-dial navigation.
+- **Daylight & Light Mode Architecture**:
+  - Full daytime driving contrast adaptation across all views, search inputs, dialogs, cards, and modal sheets.
+  - Generated dynamic vector-derived light-theme brand assets (`nuvio_logo_light.png`) with deep charcoal `#171D1E` (`onSurface`) typography.
+  - Contrast-tuned text, icons, cards, and form inputs to guarantee readability under harsh glare and direct sunlight.
+- **Player UI Material Theming (`ExoPlayerActivity.java`)**:
+  - Replaced legacy hardcoded purple and Holo elements with active `ThemeManager` palette tokens.
+  - **Center Transport Controls**: Primary circular Play/Pause button (`theme.primary` with `theme.onPrimary` glyph) flanked by translucent M3 surface circular rewind/forward buttons (-10s / +10s).
+  - **Custom M3 SeekBar**: Constructed a layered KitKat-compatible slider using `ClipDrawable` and `LayerDrawable` (translucent background track, 45% alpha buffer bar, solid `theme.primary` active progress, and 18dp circular thumb).
+  - **M3 Tool & Modal Dialogs**: Audio track and subtitle selection popups upgraded to widescreen M3 surface cards with rounded interactive track pills.
+  - **Ambient Scrims**: Dynamic alpha gradient overlays tinted with `theme.surface` for improved legibility during playback.
+- **Unified Media Cards (Movies & Shows)**:
+  - Replaced transparent container and detached bottom pill buttons with unified Material 3 interactive cards (`ThemeManager.styleInteractiveCard`).
+  - Elevated 12dp rounded surface cards with 1dp `outlineVariant` border and tactile touch & rotary focus feedback.
+  - Fixed-height two-line title block and subtitle metadata chips ("Movie • 2024" / "TV Series") for consistent horizontal alignment across rows.
+  - Built integrated M3 progress bar (`theme.surfaceContainerHighest` track with `theme.primary` fill) for Continue Watching cards.
+- **M3 Profile Management Cards ("Switch Nuvio")**:
+  - **Active Profile Hero Card**: Upgraded with a 56dp circular avatar (`theme.primaryContainer` with 2dp `theme.primary` border) and an M3 `✓ ACTIVE` badge.
+  - **Interactive Profile Switcher Carousel**: Transformed profile cards into 136dp × 172dp interactive surface cards with 14dp rounded corners, full-card click targets, and active check indicators.
+  - **"New Profile" Add Card**: Converted to an M3 interactive card with a 52dp `＋` circle and `+ Create` pill button.
+- **Episode Synopsis & Detail Layout Fixes**:
+  - Eliminated the rigid 66dp height restriction that clipped multi-line episode descriptions in series detail views.
+  - Configured dynamic row height matching (`setBaselineAligned(false)` with `card.setMinimumHeight(dp(84))`) so sibling episode cards maintain uniform height without truncation.
+  - Added support for up to 3 unclipped lines of episode synopsis with custom line spacing and clean release date metadata.
+  - Styled episode numbers with 10dp rounded M3 badges ("E01") and added circular primary play badges.
+- **Cleaned Legacy Assets**: Removed unused early prototype web assets (`assets/www/`) to trim APK size.
+
 ## [1.0.0] - 2026-11-14
 
 Initial production release of **Nuvio Auto** for Hyundai, Kia, and Genesis Gen5W infotainment systems running Android 4.4.2 KitKat (API 19) via NEMESIS.
@@ -19,10 +71,14 @@ Initial production release of **Nuvio Auto** for Hyundai, Kia, and Genesis Gen5W
 - **Vehicle Motion Guard (`MotionGuard.java`)**: Added GPS-based vehicle speed monitoring with a 2 mph threshold lockout and automatic playback pause.
 - **Telematics Modem Protection (`netguard.sh`)**: Background iptables daemon isolates Nuvio's UID traffic strictly to `wlan0`, protecting the vehicle's built-in BlueLink / UVO cellular modem from unauthorized data consumption.
 
-### 🎨 Native Automotive UI & Frontend (Milestone 2)
+### 🎨 Native Automotive UI & Material Design 3 (Milestone 2)
 - **Pure Native UI Architecture**: Eliminated Chromium 33 WebView memory overhead in favor of a responsive, native Android View hierarchy optimized for 1920x720 ultrawide displays.
-- **Nuvio Dark Purple Theme**: Styled with official Nuvio purple branding (`#a855f7` accent, `#0d0f17` background, `#151922` card surfaces).
-- **Navigation Bar**: Tabbed navigation with dedicated sections: *Movies*, *TV Series*, *Search*, *Add-ons*, *Debrid*, *Account*, *Diagnostics*, and *Settings*.
+- **Material Design 3 (M3) Native Theme Engine (`ThemeManager.java`)**: Implemented zero-dependency M3 tonal color hierarchy and shape tokens for Android 4.4 KitKat without exceeding the single-DEX method limit.
+- **6 Built-in Automotive Palettes**: Added one-tap selectable M3 themes in *Settings*: **Nuvio Classic** (Default), **Ocean Blue**, **Ioniq Teal** (Hyundai EV), **Kia Crimson**, **Genesis Copper**, and **Daylight** (High-contrast direct sunlight theme).
+- **M3 Navigation Rail & Pills**: Upgraded top navigation to full stadium pill buttons (`999dp`) with active indicator selection states.
+- **M3 Media Cards & Tonal Elevation**: Transformed catalog posters, Continue Watching items, and Nocturne stream rows into 12dp/14dp rounded M3 cards with `outlineVariant` borders.
+- **M3 Filter Chips**: Converted stream quality filters (All, 4K, 1080p, 720p, Torbox) into authentic 8dp M3 filter chips with checked states.
+- **M3 Tonal Press Feedback**: Dynamic 14% ARGB touch state blending (`blendArgb`) for responsive, native touch feedback on vehicle touchscreens.
 - **Multi-Profile Management**: Full support for Nuvio user profiles, active profile switching, and profile avatar rendering.
 - **Catalog & Addon Ecosystem**: Support for Cinemeta, CyberFlix, and Torrentio addons, catalog row scrolling, and poster browsing.
 - **Debrid Provider Integration**: Real-Debrid, Torbox, and AllDebrid account status monitoring and API key integration.

@@ -6,8 +6,11 @@ import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.drawable.ClipDrawable;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
@@ -50,6 +53,7 @@ import com.google.android.exoplayer2.video.VideoListener;
 import org.nuvio.gen5w.gate.MotionGuard;
 import org.nuvio.gen5w.gate.VehicleVideoGate;
 import org.nuvio.gen5w.sync.PlaybackSync;
+import org.nuvio.gen5w.ui.ThemeManager;
 
 import java.util.ArrayList;
 import java.util.Locale;
@@ -93,6 +97,7 @@ public class ExoPlayerActivity extends Activity {
     private boolean playerPrepared = false;
     private MediaSource pendingMediaSource = null;
     private final Handler handler = new Handler();
+    private ThemeManager.Palette theme;
 
     private static final int ACCENT = 0xffa855f7, WHITE = Color.WHITE, PANEL_BASE = 0xff131620, BORDER = 0xff283344, MUTED = 0xff94a3b8;
 
@@ -165,7 +170,7 @@ public class ExoPlayerActivity extends Activity {
     private TextView text(String value, int sp) {
         TextView t = new TextView(this);
         t.setText(value);
-        t.setTextColor(WHITE);
+        t.setTextColor(theme != null ? theme.onSurface : WHITE);
         t.setTextSize(sp);
         t.setGravity(Gravity.CENTER_VERTICAL);
         t.setPadding(dp(8), dp(2), dp(8), dp(2));
@@ -182,9 +187,12 @@ public class ExoPlayerActivity extends Activity {
     }
 
     private GradientDrawable shade(boolean atTop) {
+        int solidScrim = (theme != null) ? (0xF2000000 | (theme.surface & 0x00FFFFFF)) : 0xed0b0d14;
+        int midScrim = (theme != null) ? (0xB0000000 | (theme.surface & 0x00FFFFFF)) : 0xc90e101b;
+        int transScrim = (theme != null) ? (0x00000000 | (theme.surface & 0x00FFFFFF)) : 0x000b0d14;
         int[] colors = atTop ?
-                new int[]{0xed0b0d14, 0xc90e101b, 0x000b0d14} :
-                new int[]{0x000b0d14, 0xd10e101b, 0xf50b0d14};
+                new int[]{solidScrim, midScrim, transScrim} :
+                new int[]{transScrim, midScrim, solidScrim};
         return new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, colors);
     }
 
@@ -197,26 +205,100 @@ public class ExoPlayerActivity extends Activity {
         b.setMinimumWidth(0);
         b.setMinHeight(0);
         b.setMinimumHeight(0);
-        b.setPadding(dp(7), 0, dp(7), 0);
-        b.setTextColor(WHITE);
-        b.setBackgroundDrawable(pill(0xcc181d2a, BORDER, 12));
+        b.setPadding(dp(10), 0, dp(10), 0);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, b, (0xB8000000 | (theme.surfaceContainerHigh & 0x00FFFFFF)), theme.onSurface, 1, theme.outlineVariant, false);
+        } else {
+            b.setTextColor(WHITE);
+            b.setBackgroundDrawable(pill(0xcc181d2a, BORDER, 12));
+        }
         b.setOnClickListener(listener);
         return b;
     }
 
     private Button tool(String label, View.OnClickListener listener) {
-        Button b = button(label, listener);
+        Button b = new Button(this);
+        b.setText(label);
         b.setTextSize(13);
-        b.setBackgroundDrawable(pill(0xdd1e2334, 0xff323a4d, 12));
+        b.setAllCaps(false);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
+        b.setMinHeight(0);
+        b.setMinimumHeight(0);
+        b.setPadding(dp(12), 0, dp(12), 0);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, b, (0xC8000000 | (theme.surfaceContainerHigh & 0x00FFFFFF)), theme.onSurface, 1, theme.outlineVariant, true);
+        } else {
+            b.setTextColor(WHITE);
+            b.setBackgroundDrawable(pill(0xdd1e2334, 0xff323a4d, 12));
+        }
+        b.setOnClickListener(listener);
         return b;
     }
 
     private Button roundControl(String symbol, int size, boolean primary, View.OnClickListener listener) {
-        Button b = button(symbol, listener);
+        Button b = new Button(this);
+        b.setText(symbol);
         b.setTextSize(primary ? 32 : 21);
-        b.setTextColor(WHITE);
-        b.setBackgroundDrawable(pill(primary ? ACCENT : 0xe6251a38, primary ? 0 : 0xff3b485d, size / 2));
+        b.setAllCaps(false);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
+        b.setMinHeight(0);
+        b.setMinimumHeight(0);
+        b.setPadding(0, 0, 0, 0);
+        if (theme != null) {
+            if (primary) {
+                ThemeManager.stylePillButton(this, b, theme.primary, theme.onPrimary, 0, 0, true);
+            } else {
+                ThemeManager.stylePillButton(this, b, (0xCC000000 | (theme.surfaceContainerHigh & 0x00FFFFFF)), theme.onSurface, 1, theme.outlineVariant, false);
+            }
+        } else {
+            b.setTextColor(WHITE);
+            b.setBackgroundDrawable(pill(primary ? ACCENT : 0xe6251a38, primary ? 0 : 0xff3b485d, size / 2));
+        }
+        b.setOnClickListener(listener);
         return b;
+    }
+
+    private void styleSeekBar(SeekBar sb) {
+        if (sb == null) return;
+        try {
+            int trackH = dp(4);
+            int radius = dp(2);
+
+            GradientDrawable bgTrack = new GradientDrawable();
+            bgTrack.setShape(GradientDrawable.RECTANGLE);
+            bgTrack.setColor(theme != null ? (0x55000000 | (theme.onSurface & 0x00FFFFFF)) : 0x44ffffff);
+            bgTrack.setCornerRadius(radius);
+            bgTrack.setSize(-1, trackH);
+
+            GradientDrawable bufTrack = new GradientDrawable();
+            bufTrack.setShape(GradientDrawable.RECTANGLE);
+            bufTrack.setColor(theme != null ? (0x88000000 | (theme.primary & 0x00FFFFFF)) : 0x88a855f7);
+            bufTrack.setCornerRadius(radius);
+            bufTrack.setSize(-1, trackH);
+            ClipDrawable bufClip = new ClipDrawable(bufTrack, Gravity.LEFT, ClipDrawable.HORIZONTAL);
+
+            GradientDrawable progTrack = new GradientDrawable();
+            progTrack.setShape(GradientDrawable.RECTANGLE);
+            progTrack.setColor(theme != null ? theme.primary : 0xffa855f7);
+            progTrack.setCornerRadius(radius);
+            progTrack.setSize(-1, trackH);
+            ClipDrawable progClip = new ClipDrawable(progTrack, Gravity.LEFT, ClipDrawable.HORIZONTAL);
+
+            Drawable[] layers = new Drawable[]{ bgTrack, bufClip, progClip };
+            LayerDrawable ld = new LayerDrawable(layers);
+            ld.setId(0, android.R.id.background);
+            ld.setId(1, android.R.id.secondaryProgress);
+            ld.setId(2, android.R.id.progress);
+            sb.setProgressDrawable(ld);
+
+            GradientDrawable thumb = new GradientDrawable();
+            thumb.setShape(GradientDrawable.OVAL);
+            thumb.setColor(theme != null ? theme.primary : 0xffa855f7);
+            thumb.setSize(dp(18), dp(18));
+            sb.setThumb(thumb);
+        } catch (Throwable ignored) {}
     }
 
     private void spaced(LinearLayout row, Button b, int width, int height, int space) {
@@ -266,6 +348,8 @@ public class ExoPlayerActivity extends Activity {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+
+        theme = ThemeManager.loadSavedPalette(this);
 
         Intent intent = getIntent();
         streamUrl = intent.getStringExtra("stream_url");
@@ -385,10 +469,12 @@ public class ExoPlayerActivity extends Activity {
         seekRow.setGravity(Gravity.CENTER_VERTICAL);
 
         positionLabel = text("00:00:00", 13);
+        if (theme != null) positionLabel.setTextColor(theme.onSurfaceVariant);
         seekRow.addView(positionLabel, new LinearLayout.LayoutParams(dp(75), -2));
 
         seek = new SeekBar(this);
         seek.setMax(1000);
+        styleSeekBar(seek);
         seek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -414,6 +500,7 @@ public class ExoPlayerActivity extends Activity {
         seekRow.addView(seek, new LinearLayout.LayoutParams(0, -2, 1));
 
         durationLabel = text("00:00:00", 13);
+        if (theme != null) durationLabel.setTextColor(theme.onSurfaceVariant);
         durationLabel.setGravity(Gravity.RIGHT);
         seekRow.addView(durationLabel, new LinearLayout.LayoutParams(dp(90), -2));
         bottomPanel.addView(seekRow);
@@ -444,8 +531,13 @@ public class ExoPlayerActivity extends Activity {
         status = text("Connecting to stream…", 14);
         status.setGravity(Gravity.CENTER);
         status.setPadding(dp(24), dp(16), dp(24), dp(16));
-        status.setBackgroundDrawable(pill(0xf2151922, ACCENT, 10));
-        status.setTextColor(Color.WHITE);
+        if (theme != null) {
+            ThemeManager.styleSurfaceCard(this, status, (0xF2000000 | (theme.surfaceContainer & 0x00FFFFFF)), 12, 1, theme.outlineVariant);
+            status.setTextColor(theme.onSurface);
+        } else {
+            status.setBackgroundDrawable(pill(0xf2151922, ACCENT, 10));
+            status.setTextColor(Color.WHITE);
+        }
         FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
         slp.setMargins(dp(30), 0, dp(30), 0);
         root.addView(status, slp);
@@ -721,31 +813,98 @@ public class ExoPlayerActivity extends Activity {
             }
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle(kind == C.TRACK_TYPE_AUDIO ? "Select Audio Track" : "Select Subtitles");
-        builder.setItems(names.toArray(new String[0]), new android.content.DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(android.content.DialogInterface dialog, int which) {
-                int r = renderers.get(which);
-                DefaultTrackSelector.ParametersBuilder settings = selector.buildUponParameters();
-                if (r == -1) {
-                    for (int i = 0; i < map.getRendererCount(); i++) {
-                        if (map.getRendererType(i) == kind) {
-                            settings.setRendererDisabled(i, kind == C.TRACK_TYPE_TEXT);
-                            settings.clearSelectionOverrides(i);
+        final Dialog dialog = new Dialog(this, android.R.style.Theme_Translucent_NoTitleBar);
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(22), dp(18), dp(22), dp(18));
+        if (theme != null) {
+            ThemeManager.styleSurfaceCard(this, panel, (0xF2000000 | (theme.surfaceContainer & 0x00FFFFFF)), 16, 1, theme.outlineVariant);
+        } else {
+            panel.setBackgroundDrawable(pill(0xf0151922, BORDER, 14));
+        }
+
+        TextView dTitle = text(kind == C.TRACK_TYPE_AUDIO ? "Select Audio Track" : "Select Subtitles", 17);
+        dTitle.setTypeface(null, 1);
+        dTitle.setTextColor(theme != null ? theme.primary : ACCENT);
+        dTitle.setPadding(0, 0, 0, dp(12));
+        panel.addView(dTitle);
+
+        ScrollView sv = new ScrollView(this);
+        sv.setFillViewport(true);
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+
+        for (int i = 0; i < names.size(); i++) {
+            final int which = i;
+            Button itemBtn = new Button(this);
+            itemBtn.setText(names.get(i));
+            itemBtn.setTextSize(14);
+            itemBtn.setGravity(Gravity.LEFT | Gravity.CENTER_VERTICAL);
+            itemBtn.setPadding(dp(16), dp(8), dp(16), dp(8));
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, itemBtn, (0xC8000000 | (theme.surfaceContainerHigh & 0x00FFFFFF)), theme.onSurface, 1, theme.outlineVariant, false);
+            } else {
+                itemBtn.setTextColor(Color.WHITE);
+                itemBtn.setBackgroundDrawable(pill(0xcc181d2a, BORDER, 8));
+            }
+            itemBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    dialog.dismiss();
+                    int r = renderers.get(which);
+                    DefaultTrackSelector.ParametersBuilder settings = selector.buildUponParameters();
+                    if (r == -1) {
+                        for (int k = 0; k < map.getRendererCount(); k++) {
+                            if (map.getRendererType(k) == kind) {
+                                settings.setRendererDisabled(k, kind == C.TRACK_TYPE_TEXT);
+                                settings.clearSelectionOverrides(k);
+                            }
                         }
+                    } else {
+                        int g = groups.get(which);
+                        int t = tracks.get(which);
+                        settings.setRendererDisabled(r, false);
+                        settings.setSelectionOverride(r, map.getTrackGroups(r),
+                                new DefaultTrackSelector.SelectionOverride(g, t));
                     }
-                } else {
-                    int g = groups.get(which);
-                    int t = tracks.get(which);
-                    settings.setRendererDisabled(r, false);
-                    settings.setSelectionOverride(r, map.getTrackGroups(r),
-                            new DefaultTrackSelector.SelectionOverride(g, t));
+                    selector.setParameters(settings);
                 }
-                selector.setParameters(settings);
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(44));
+            lp.setMargins(0, dp(3), 0, dp(3));
+            list.addView(itemBtn, lp);
+        }
+        sv.addView(list);
+        panel.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        Button cancel = new Button(this);
+        cancel.setText("Cancel");
+        cancel.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, cancel, theme.surfaceContainerHighest, theme.onSurface, 0, 0, true);
+        } else {
+            cancel.setTextColor(Color.WHITE);
+            cancel.setBackgroundDrawable(pill(0xcc181d2a, 0, 8));
+        }
+        cancel.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.dismiss();
             }
         });
-        builder.show();
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(-1, dp(42));
+        clp.setMargins(0, dp(12), 0, 0);
+        panel.addView(cancel, clp);
+
+        dialog.setContentView(panel);
+        dialog.show();
+
+        Window w = dialog.getWindow();
+        if (w != null) {
+            w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(48), dp(480)),
+                    Math.min(getResources().getDisplayMetrics().heightPixels - dp(48), dp(380)));
+            w.setGravity(Gravity.CENTER);
+        }
     }
 
     @Override

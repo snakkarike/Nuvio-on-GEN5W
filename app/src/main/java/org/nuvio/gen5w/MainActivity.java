@@ -34,7 +34,6 @@ import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -46,6 +45,8 @@ import org.nuvio.gen5w.gate.VehicleVideoGate;
 import org.nuvio.gen5w.player.ExoPlayerActivity;
 import org.nuvio.gen5w.player.VideoTls;
 import org.nuvio.gen5w.ui.FlagText;
+import org.nuvio.gen5w.ui.M3Switch;
+import org.nuvio.gen5w.ui.ThemeManager;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
@@ -101,7 +102,16 @@ public class MainActivity extends Activity {
     private static final long CATALOG_AGE = 30 * 60 * 1000L;
     private static final long ADDONS_AGE = 20 * 60 * 1000L;
 
-    final int bg = 0xff0b0d14, accent = 0xffa855f7, surface = 0xff151922, muted = 0xff94a3b8;
+    int bg = 0xFF141218, accent = 0xFFD0BCFF, surface = 0xFF24212B, muted = 0xFFCAC4D0;
+    ThemeManager.Palette theme;
+
+    void loadActiveTheme() {
+        theme = ThemeManager.loadSavedPalette(this);
+        bg = theme.surface;
+        surface = theme.surfaceContainer;
+        accent = theme.primary;
+        muted = theme.onSurfaceVariant;
+    }
     LinearLayout root, body;
     TextView streamTitleView;
     String page = "Home", auth = "", selectedId = "", selectedType = "movie", selectedVideoId = "", selectedVideoLabel = "", selectedPoster = "", selectedName = "";
@@ -230,6 +240,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        loadActiveTheme();
         prefs = getSharedPreferences("nuvio_stremio_prefs", MODE_PRIVATE);
         parkedConfirmed = prefs.getBoolean("disable_popup", false) && prefs.getBoolean("welcome_seen", false);
         auth = prefs.getString("auth", "");
@@ -310,7 +321,7 @@ public class MainActivity extends Activity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(22), dp(18), dp(22), dp(18));
-        panel.setBackgroundDrawable(shape(surface, 14));
+        ThemeManager.styleSurfaceCard(this, panel, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
         panel.setGravity(Gravity.CENTER);
 
         TextView heading = text(firstLaunch ? "WELCOME TO NUVIO" : "PARKED VEHICLE REQUIRED", 20);
@@ -322,6 +333,7 @@ public class MainActivity extends Activity {
                 "Nuvio Auto enables Stremio streaming and Debrid media directly on your car screen.\n\nVideo playback is for use only while parked. Never watch or operate video while driving." :
                 "Confirm your vehicle is fully parked. Video playback is for use only while parked. Never watch or operate video while driving.", 15);
         copy.setPadding(dp(8), dp(10), dp(8), dp(14));
+        copy.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
         panel.addView(copy);
 
         LinearLayout actions = new LinearLayout(this);
@@ -344,8 +356,13 @@ public class MainActivity extends Activity {
             }
         });
 
-        confirm.setBackgroundDrawable(shape(accent, 10));
-        confirm.setTextColor(Color.WHITE);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, exit, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+            ThemeManager.stylePillButton(this, confirm, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            confirm.setBackgroundDrawable(shape(accent, 10));
+            confirm.setTextColor(Color.WHITE);
+        }
 
         LinearLayout.LayoutParams el = new LinearLayout.LayoutParams(0, dp(48), 1);
         el.setMargins(0, 0, dp(8), 0);
@@ -364,6 +381,7 @@ public class MainActivity extends Activity {
     }
 
     void render(String next, boolean push) {
+        loadActiveTheme();
         if (push && !page.equals(next)) history.add(page);
         page = next;
 
@@ -388,7 +406,9 @@ public class MainActivity extends Activity {
         ImageView brandLogo = new ImageView(this);
         brandLogo.setScaleType(ImageView.ScaleType.FIT_START);
         brandLogo.setAdjustViewBounds(true);
-        int logoId = getResources().getIdentifier("nuvio_logo", "drawable", getPackageName());
+        String logoRes = (theme != null && theme.isLight) ? "nuvio_logo_light" : "nuvio_logo";
+        int logoId = getResources().getIdentifier(logoRes, "drawable", getPackageName());
+        if (logoId == 0) logoId = getResources().getIdentifier("nuvio_logo", "drawable", getPackageName());
         if (logoId != 0) {
             brandLogo.setImageResource(logoId);
             brandBox.addView(brandLogo, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, dp(28)));
@@ -417,7 +437,7 @@ public class MainActivity extends Activity {
         });
         header.addView(brandBox, new LinearLayout.LayoutParams(0, dp(44), 1));
 
-        TextView current = text("v1.0.0 • " + page.toUpperCase(Locale.US), 13);
+        TextView current = text("v1.0.1 • " + page.toUpperCase(Locale.US), 13);
         current.setTextColor(muted);
         header.addView(current);
         root.addView(header);
@@ -435,40 +455,38 @@ public class MainActivity extends Activity {
                     back();
                 }
             });
-            backBtn.setTextSize(14);
-            backBtn.setTypeface(null, 1);
-            backBtn.setBackgroundDrawable(shape(0xff251a38, accent, 8, 1));
-            backBtn.setTextColor(Color.WHITE);
-            nav.addView(backBtn, new LinearLayout.LayoutParams(dp(100), dp(40)));
+            backBtn.setTextSize(13);
+            ThemeManager.stylePillButton(this, backBtn, theme.primaryContainer, theme.onPrimaryContainer, 0, 0, true);
+            nav.addView(backBtn, new LinearLayout.LayoutParams(dp(100), dp(38)));
 
             streamTitleView = text((selectedName.isEmpty() || "Untitled".equals(selectedName)) ? selectedId : selectedName, 18);
             streamTitleView.setTypeface(null, 1);
-            streamTitleView.setTextColor(Color.WHITE);
+            streamTitleView.setTextColor(theme.onSurface);
             streamTitleView.setPadding(dp(14), 0, dp(14), 0);
             streamTitleView.setSingleLine(true);
             streamTitleView.setEllipsize(TextUtils.TruncateAt.END);
             nav.addView(streamTitleView, new LinearLayout.LayoutParams(0, -2, 1));
 
             if (!selectedVideoLabel.isEmpty()) {
-                TextView epBadge = badge(selectedVideoLabel, accent, Color.WHITE, 0);
+                TextView epBadge = badge(selectedVideoLabel, theme.secondaryContainer, theme.onSecondaryContainer, 0);
                 epBadge.setTextSize(12);
-                epBadge.setPadding(dp(10), dp(4), dp(10), dp(4));
+                epBadge.setPadding(dp(12), dp(4), dp(12), dp(4));
                 nav.addView(epBadge, new LinearLayout.LayoutParams(-2, -2));
             } else if ("series".equals(selectedType)) {
-                TextView typeBadge = badge("TV SERIES", 0xff251a38, accent, accent);
+                TextView typeBadge = badge("TV SERIES", theme.surfaceContainerHighest, theme.primary, theme.outlineVariant);
                 typeBadge.setTextSize(12);
-                typeBadge.setPadding(dp(10), dp(4), dp(10), dp(4));
+                typeBadge.setPadding(dp(12), dp(4), dp(12), dp(4));
                 nav.addView(typeBadge, new LinearLayout.LayoutParams(-2, -2));
             } else {
-                TextView typeBadge = badge("MOVIE", 0xff251a38, accent, accent);
+                TextView typeBadge = badge("MOVIE", theme.surfaceContainerHighest, theme.primary, theme.outlineVariant);
                 typeBadge.setTextSize(12);
-                typeBadge.setPadding(dp(10), dp(4), dp(10), dp(4));
+                typeBadge.setPadding(dp(12), dp(4), dp(12), dp(4));
                 nav.addView(typeBadge, new LinearLayout.LayoutParams(-2, -2));
             }
 
             root.addView(nav);
         } else {
-            // Main Top Navigation Bar (Nuvio Native Structure: No Back button on Home)
+            // Main Top Navigation Bar - Material Design 3 Navigation Rail Pills
             LinearLayout nav = new LinearLayout(this);
             nav.setOrientation(LinearLayout.HORIZONTAL);
             nav.setPadding(dp(8), dp(2), dp(8), dp(6));
@@ -486,12 +504,10 @@ public class MainActivity extends Activity {
                 });
                 tab.setTextSize(12);
                 tab.setPadding(dp(2), dp(2), dp(2), dp(2));
-                if (target.equals(page) || ("Home".equals(page) && "Movies".equals(target))) {
-                    tab.setBackgroundDrawable(shape(accent, 8));
-                    tab.setTextColor(Color.WHITE);
-                }
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(42), 1);
-                lp.setMargins(dp(2), 0, dp(2), 0);
+                boolean isSelected = target.equals(page) || ("Home".equals(page) && "Movies".equals(target));
+                ThemeManager.styleNavPill(this, tab, theme, labels[i], isSelected);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1);
+                lp.setMargins(dp(3), 0, dp(3), 0);
                 nav.addView(tab, lp);
             }
             root.addView(nav);
@@ -655,43 +671,92 @@ public class MainActivity extends Activity {
                 final String[] fVidId = new String[]{ finalVidId };
                 final String[] fVidLabel = new String[]{ finalVidLabel };
 
-                LinearLayout card = new LinearLayout(this);
+                final LinearLayout card = new LinearLayout(this);
                 card.setOrientation(LinearLayout.VERTICAL);
-                card.setPadding(dp(4), dp(4), dp(4), dp(4));
+                card.setPadding(dp(6), dp(6), dp(6), dp(8));
+                card.setClickable(true);
+                card.setFocusable(true);
+                if (theme != null) {
+                    ThemeManager.styleInteractiveCard(this, card, theme.surfaceContainer, theme.onSurface, 12, 1, theme.outlineVariant);
+                } else {
+                    card.setBackgroundDrawable(shape(surface, 12));
+                }
 
                 ImageView cover = new ImageView(this);
                 cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                cover.setBackgroundDrawable(shape(surface, 8));
+                if (theme != null) {
+                    ThemeManager.styleSurfaceCard(this, cover, theme.surfaceContainerHighest, 8, 0, 0);
+                } else {
+                    cover.setBackgroundDrawable(shape(0xff232b38, 8));
+                }
 
                 FrameLayout tile = new FrameLayout(this);
                 tile.addView(cover, new FrameLayout.LayoutParams(-1, -1));
 
                 TextView label = text(name, 12);
                 label.setGravity(Gravity.CENTER);
+                label.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+                label.setMaxLines(3);
+                label.setEllipsize(TextUtils.TruncateAt.END);
                 tile.addView(label, new FrameLayout.LayoutParams(-1, -1));
                 cover.setTag(label);
 
-                if (dur > 0) {
-                    View progressBg = new View(this);
-                    progressBg.setBackgroundColor(0xcc000000);
-                    FrameLayout.LayoutParams bgLp = new FrameLayout.LayoutParams(-1, dp(5));
-                    bgLp.gravity = Gravity.BOTTOM;
-                    tile.addView(progressBg, bgLp);
+                card.addView(tile, new LinearLayout.LayoutParams(dp(130), dp(175)));
 
+                if (dur > 0) {
+                    FrameLayout progressTrack = new FrameLayout(this);
+                    if (theme != null) {
+                        ThemeManager.styleSurfaceCard(this, progressTrack, theme.surfaceContainerHighest, 2, 0, 0);
+                    } else {
+                        progressTrack.setBackgroundDrawable(shape(0xcc000000, 2));
+                    }
                     View progressFill = new View(this);
-                    progressFill.setBackgroundColor(accent);
+                    if (theme != null) {
+                        ThemeManager.styleSurfaceCard(this, progressFill, theme.primary, 2, 0, 0);
+                    } else {
+                        progressFill.setBackgroundDrawable(shape(accent, 2));
+                    }
                     int fillWidth = (int) (dp(130) * Math.min(1.0, (double) pos / (double) dur));
-                    FrameLayout.LayoutParams fillLp = new FrameLayout.LayoutParams(fillWidth, dp(5));
-                    fillLp.gravity = Gravity.BOTTOM;
-                    tile.addView(progressFill, fillLp);
+                    FrameLayout.LayoutParams fillLp = new FrameLayout.LayoutParams(fillWidth, dp(4));
+                    progressTrack.addView(progressFill, fillLp);
+                    LinearLayout.LayoutParams pTrackLp = new LinearLayout.LayoutParams(dp(130), dp(4));
+                    pTrackLp.setMargins(0, dp(4), 0, 0);
+                    card.addView(progressTrack, pTrackLp);
                 }
 
-                card.addView(tile, new LinearLayout.LayoutParams(dp(130), dp(175)));
+                LinearLayout info = new LinearLayout(this);
+                info.setOrientation(LinearLayout.VERTICAL);
+                info.setPadding(dp(2), dp(6), dp(2), dp(2));
+
+                final TextView titleView = text(name, 12);
+                titleView.setTypeface(null, 1);
+                titleView.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+                titleView.setMaxLines(1);
+                titleView.setEllipsize(TextUtils.TruncateAt.END);
+                info.addView(titleView);
+
+                String epPrefix = "";
+                if (!finalVidLabel.isEmpty()) {
+                    epPrefix = finalVidLabel.replace("Season ", "S").replace(", Episode ", "E");
+                    if (epPrefix.contains(" • ")) epPrefix = epPrefix.substring(0, epPrefix.indexOf(" • "));
+                    epPrefix = epPrefix + " • ";
+                }
+                String minText = dur > 0 ? ((pos / 60000) + " / " + (dur / 60000) + " min") : ((pos / 60000) + " min");
+                TextView resumeText = text("▶ " + epPrefix + minText, 11);
+                resumeText.setTypeface(null, 1);
+                resumeText.setTextColor(theme != null ? theme.primary : accent);
+                resumeText.setSingleLine(true);
+                resumeText.setEllipsize(TextUtils.TruncateAt.END);
+                info.addView(resumeText);
+
+                card.addView(info, new LinearLayout.LayoutParams(dp(130), -2));
+
                 if (poster.startsWith("http")) loadPoster(cover, poster);
 
                 if (!poster.startsWith("http") || fName[0].equals(id) || "Untitled".equals(fName[0])) {
                     final ImageView fCover = cover;
                     final TextView fLabel = label;
+                    final TextView fTitle = titleView;
                     apiWorkers.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -712,7 +777,10 @@ public class MainActivity extends Activity {
                                     runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
-                                            if (!pTitle.isEmpty()) fLabel.setText(pTitle);
+                                            if (!pTitle.isEmpty()) {
+                                                fLabel.setText(pTitle);
+                                                fTitle.setText(pTitle);
+                                            }
                                             if (pUrl.startsWith("http")) loadPoster(fCover, pUrl);
                                         }
                                     });
@@ -735,23 +803,15 @@ public class MainActivity extends Activity {
                         render("Streams", true);
                     }
                 };
-                tile.setOnClickListener(new View.OnClickListener() {
+                View.OnClickListener openListener = new View.OnClickListener() {
                     @Override public void onClick(View v) { open.run(); }
-                });
+                };
+                card.setOnClickListener(openListener);
+                tile.setOnClickListener(openListener);
 
-                String epPrefix = "";
-                if (!finalVidLabel.isEmpty()) {
-                    epPrefix = finalVidLabel.replace("Season ", "S").replace(", Episode ", "E");
-                    if (epPrefix.contains(" • ")) epPrefix = epPrefix.substring(0, epPrefix.indexOf(" • "));
-                    epPrefix = epPrefix + " • ";
-                }
-                String minText = dur > 0 ? ((pos / 60000) + " / " + (dur / 60000) + " min") : ((pos / 60000) + " min");
-                Button resumeBtn = btn("▶ " + epPrefix + minText, open);
-                resumeBtn.setTextSize(11);
-                resumeBtn.setBackgroundDrawable(shape(surface, 6));
-                card.addView(resumeBtn, new LinearLayout.LayoutParams(dp(130), dp(36)));
-
-                row.addView(card, new LinearLayout.LayoutParams(dp(138), -2));
+                LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(dp(142), -2);
+                cardLp.setMargins(0, dp(4), dp(10), dp(8));
+                row.addView(card, cardLp);
             }
             scroll.addView(row);
             section.addView(scroll);
@@ -929,21 +989,33 @@ public class MainActivity extends Activity {
         final String name = meta.optString("name", meta.optString("title", id));
         if (id.isEmpty()) return;
 
-        LinearLayout card = new LinearLayout(this);
+        final LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(4), dp(4), dp(4), dp(4));
+        card.setPadding(dp(6), dp(6), dp(6), dp(8));
+        card.setClickable(true);
+        card.setFocusable(true);
+        if (theme != null) {
+            ThemeManager.styleInteractiveCard(this, card, theme.surfaceContainer, theme.onSurface, 12, 1, theme.outlineVariant);
+        } else {
+            card.setBackgroundDrawable(shape(surface, 12));
+        }
 
         ImageView cover = new ImageView(this);
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        cover.setBackgroundDrawable(shape(surface, 8));
+        if (theme != null) {
+            ThemeManager.styleSurfaceCard(this, cover, theme.surfaceContainerHighest, 8, 0, 0);
+        } else {
+            cover.setBackgroundDrawable(shape(0xff232b38, 8));
+        }
 
         FrameLayout tile = new FrameLayout(this);
         tile.addView(cover, new FrameLayout.LayoutParams(-1, -1));
 
-        TextView label = text(name, 13);
+        TextView label = text(name, 12);
         label.setGravity(Gravity.CENTER);
-        label.setTextColor(Color.WHITE);
+        label.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
         label.setMaxLines(3);
+        label.setEllipsize(TextUtils.TruncateAt.END);
         tile.addView(label, new FrameLayout.LayoutParams(-1, -1));
         cover.setTag(label);
 
@@ -968,19 +1040,40 @@ public class MainActivity extends Activity {
             }
         };
 
-        tile.setOnClickListener(new View.OnClickListener() {
+        View.OnClickListener clickListener = new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 openTitle.run();
             }
-        });
+        };
+        card.setOnClickListener(clickListener);
+        tile.setOnClickListener(clickListener);
 
-        Button btnTitle = btn(name, openTitle);
-        btnTitle.setTextSize(12);
-        btnTitle.setBackgroundDrawable(shape(surface, 6));
-        card.addView(btnTitle, new LinearLayout.LayoutParams(dp(130), dp(44)));
+        LinearLayout info = new LinearLayout(this);
+        info.setOrientation(LinearLayout.VERTICAL);
+        info.setPadding(dp(2), dp(6), dp(2), dp(2));
 
-        row.addView(card, new LinearLayout.LayoutParams(dp(138), -2));
+        TextView titleText = text(name, 12);
+        titleText.setTypeface(null, 1);
+        titleText.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        titleText.setMaxLines(2);
+        titleText.setEllipsize(TextUtils.TruncateAt.END);
+        info.addView(titleText, new LinearLayout.LayoutParams(-1, dp(32)));
+
+        String year = meta.optString("year", meta.optString("releaseInfo", ""));
+        String typeLabel = "series".equals(mt) ? "TV Series" : "Movie";
+        String metaLine = !year.isEmpty() ? (typeLabel + " • " + year) : typeLabel;
+        TextView metaText = text(metaLine, 11);
+        metaText.setTextColor(theme != null ? theme.onSurfaceVariant : muted);
+        metaText.setSingleLine(true);
+        metaText.setEllipsize(TextUtils.TruncateAt.END);
+        info.addView(metaText);
+
+        card.addView(info, new LinearLayout.LayoutParams(dp(130), -2));
+
+        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(dp(142), -2);
+        cardLp.setMargins(0, dp(4), dp(10), dp(8));
+        row.addView(card, cardLp);
     }
 
     File getPosterCacheFile(String url) {
@@ -1262,7 +1355,7 @@ public class MainActivity extends Activity {
         // 1. Information Banner Card (Poster + Metadata + Synopsis)
         LinearLayout infoCard = new LinearLayout(this);
         infoCard.setOrientation(LinearLayout.HORIZONTAL);
-        infoCard.setBackgroundDrawable(shape(surface, 10));
+        ThemeManager.styleSurfaceCard(this, infoCard, theme.surfaceContainer, 14, 1, theme.outlineVariant);
         infoCard.setPadding(dp(12), dp(10), dp(14), dp(10));
         LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(-1, -2);
         infoLp.setMargins(0, 0, 0, dp(10));
@@ -1270,7 +1363,7 @@ public class MainActivity extends Activity {
 
         final ImageView posterIv = new ImageView(this);
         posterIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        posterIv.setBackgroundDrawable(shape(0xff0f172a, 8));
+        ThemeManager.styleSurfaceCard(this, posterIv, theme.surfaceContainerHighest, 10, 1, theme.outlineVariant);
         infoCard.addView(posterIv, new LinearLayout.LayoutParams(dp(75), dp(110)));
         if (selectedPoster.startsWith("http")) {
             loadPoster(posterIv, selectedPoster);
@@ -1282,7 +1375,7 @@ public class MainActivity extends Activity {
 
         final TextView infoTitle = text((selectedName.isEmpty() || "Untitled".equals(selectedName)) ? selectedId : selectedName, 17);
         infoTitle.setTypeface(null, 1);
-        infoTitle.setTextColor(Color.WHITE);
+        infoTitle.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
         details.addView(infoTitle);
 
         final TextView metaText = text("Loading details from Cinemeta…", 12);
@@ -1304,7 +1397,7 @@ public class MainActivity extends Activity {
             epRow.setPadding(0, dp(6), 0, 0);
 
             TextView epLbl = text("Episode: " + selectedVideoLabel, 13);
-            epLbl.setTextColor(Color.WHITE);
+            epLbl.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
             epLbl.setTypeface(null, 1);
             epRow.addView(epLbl, new LinearLayout.LayoutParams(0, -2, 1));
 
@@ -1443,8 +1536,7 @@ public class MainActivity extends Activity {
             Button b = qualityButtons.get(q);
             if (b != null) {
                 boolean active = q.equals(sourceFilter);
-                b.setBackgroundDrawable(shape(active ? accent : surface, 6));
-                b.setTextColor(Color.WHITE);
+                ThemeManager.styleFilterChip(this, b, theme, q, active);
             }
         }
     }
@@ -1527,7 +1619,7 @@ public class MainActivity extends Activity {
                             // Show Overview Card (Poster + Metadata + Description)
                             LinearLayout infoCard = new LinearLayout(MainActivity.this);
                             infoCard.setOrientation(LinearLayout.HORIZONTAL);
-                            infoCard.setBackgroundDrawable(shape(surface, 10));
+                            ThemeManager.styleSurfaceCard(MainActivity.this, infoCard, theme != null ? theme.surfaceContainer : surface, 10, 1, theme != null ? theme.outlineVariant : 0);
                             infoCard.setPadding(dp(12), dp(10), dp(14), dp(10));
                             LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(-1, -2);
                             infoLp.setMargins(0, 0, 0, dp(10));
@@ -1535,7 +1627,7 @@ public class MainActivity extends Activity {
 
                             ImageView posterIv = new ImageView(MainActivity.this);
                             posterIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
-                            posterIv.setBackgroundDrawable(shape(0xff0f172a, 8));
+                            ThemeManager.styleSurfaceCard(MainActivity.this, posterIv, theme != null ? theme.surfaceContainerHighest : 0xff0f172a, 8, 1, theme != null ? theme.outlineVariant : 0);
                             infoCard.addView(posterIv, new LinearLayout.LayoutParams(dp(75), dp(110)));
                             String pUrl = meta != null ? meta.optString("poster", selectedPoster) : selectedPoster;
                             if (pUrl.startsWith("http")) loadPoster(posterIv, pUrl);
@@ -1546,7 +1638,7 @@ public class MainActivity extends Activity {
 
                             TextView infoTitle = text(selectedName, 17);
                             infoTitle.setTypeface(null, 1);
-                            infoTitle.setTextColor(Color.WHITE);
+                            infoTitle.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
                             details.addView(infoTitle);
 
                             String year = meta != null ? meta.optString("year", "") : "";
@@ -1635,9 +1727,13 @@ public class MainActivity extends Activity {
                                         Button b = seasonButtons.get(sNum);
                                         if (b == null) continue;
                                         boolean sel = (sNum == s);
-                                        b.setBackgroundDrawable(shape(sel ? accent : surface, 8));
-                                        b.setTextColor(Color.WHITE);
-                                        b.setTypeface(null, sel ? 1 : 0);
+                                        if (theme != null) {
+                                            ThemeManager.styleFilterChip(MainActivity.this, b, theme, b.getText().toString(), sel);
+                                        } else {
+                                            b.setBackgroundDrawable(shape(sel ? accent : surface, 8));
+                                            b.setTextColor(Color.WHITE);
+                                            b.setTypeface(null, sel ? 1 : 0);
+                                        }
                                     }
 
                                     ArrayList<JSONObject> eps = seasonsMap.get(s);
@@ -1667,6 +1763,7 @@ public class MainActivity extends Activity {
                                         if (i % 2 == 0) {
                                             currentRow = new LinearLayout(MainActivity.this);
                                             currentRow.setOrientation(LinearLayout.HORIZONTAL);
+                                            currentRow.setBaselineAligned(false);
                                             LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, -2);
                                             rLp.setMargins(0, dp(4), 0, dp(4));
                                             currentRow.setLayoutParams(rLp);
@@ -1676,49 +1773,63 @@ public class MainActivity extends Activity {
                                         LinearLayout card = new LinearLayout(MainActivity.this);
                                         card.setOrientation(LinearLayout.HORIZONTAL);
                                         card.setGravity(Gravity.CENTER_VERTICAL);
-                                        card.setBackgroundDrawable(shape(surface, 8));
-                                        card.setPadding(dp(12), dp(10), dp(12), dp(10));
                                         card.setClickable(true);
+                                        card.setFocusable(true);
+                                        card.setMinimumHeight(dp(84));
+                                        card.setPadding(dp(12), dp(10), dp(12), dp(10));
+                                        if (theme != null) {
+                                            ThemeManager.styleInteractiveCard(MainActivity.this, card, theme.surfaceContainer, theme.onSurface, 12, 1, theme.outlineVariant);
+                                        } else {
+                                            card.setBackgroundDrawable(shape(surface, 12));
+                                        }
 
                                         TextView badge = text("E" + (epNum < 10 ? "0" + epNum : String.valueOf(epNum)), 13);
                                         badge.setTypeface(null, 1);
                                         badge.setGravity(Gravity.CENTER);
-                                        badge.setTextColor(accent);
-                                        badge.setBackgroundDrawable(shape(0xff251a38, 6));
+                                        badge.setTextColor(theme != null ? theme.primary : accent);
+                                        if (theme != null) {
+                                            ThemeManager.styleSurfaceCard(MainActivity.this, badge, theme.surfaceContainerHighest, 10, 0, 0);
+                                        } else {
+                                            badge.setBackgroundDrawable(shape(0xff251a38, 10));
+                                        }
                                         card.addView(badge, new LinearLayout.LayoutParams(dp(44), dp(44)));
 
                                         LinearLayout info = new LinearLayout(MainActivity.this);
                                         info.setOrientation(LinearLayout.VERTICAL);
                                         info.setPadding(dp(12), 0, dp(8), 0);
 
-                                        TextView tView = text(epTitle, 14);
+                                        TextView tView = text(epTitle, 13);
                                         tView.setTypeface(null, 1);
+                                        tView.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
                                         tView.setSingleLine(true);
                                         tView.setEllipsize(TextUtils.TruncateAt.END);
                                         info.addView(tView);
 
-                                        String sub = "";
-                                        if (!epRelease.isEmpty()) {
-                                            sub = epRelease.length() >= 10 ? epRelease.substring(0, 10) : epRelease;
+                                        String relDate = !epRelease.isEmpty() ? (epRelease.length() >= 10 ? epRelease.substring(0, 10) : epRelease) : "";
+                                        String descText = !epOverview.isEmpty() ? epOverview : ("Season " + s + ", Episode " + epNum);
+                                        if (!relDate.isEmpty()) {
+                                            descText = relDate + " • " + descText;
                                         }
-                                        if (!epOverview.isEmpty()) {
-                                            if (!sub.isEmpty()) sub += " • " + epOverview;
-                                            else sub = epOverview;
-                                        }
-                                        if (sub.isEmpty()) sub = "Season " + s + ", Episode " + epNum;
 
-                                        TextView sView = text(sub, 11);
-                                        sView.setTextColor(muted);
-                                        sView.setMaxLines(2);
+                                        TextView sView = text(descText, 11);
+                                        sView.setTextColor(theme != null ? theme.onSurfaceVariant : muted);
+                                        sView.setMaxLines(3);
                                         sView.setEllipsize(TextUtils.TruncateAt.END);
+                                        sView.setLineSpacing(dp(1), 1.0f);
                                         info.addView(sView);
 
                                         card.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
 
-                                        TextView playIco = text("▶", 13);
-                                        playIco.setTextColor(accent);
-                                        playIco.setPadding(dp(4), 0, dp(4), 0);
-                                        card.addView(playIco, new LinearLayout.LayoutParams(-2, -2));
+                                        TextView playIco = text("▶", 12);
+                                        playIco.setGravity(Gravity.CENTER);
+                                        if (theme != null) {
+                                            playIco.setTextColor(theme.onPrimary);
+                                            ThemeManager.styleSurfaceCard(MainActivity.this, playIco, theme.primary, 14, 0, 0);
+                                        } else {
+                                            playIco.setTextColor(Color.WHITE);
+                                            playIco.setBackgroundDrawable(shape(accent, 14));
+                                        }
+                                        card.addView(playIco, new LinearLayout.LayoutParams(dp(28), dp(28)));
 
                                         card.setOnClickListener(new View.OnClickListener() {
                                             @Override
@@ -1730,14 +1841,14 @@ public class MainActivity extends Activity {
                                             }
                                         });
 
-                                        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(0, dp(66), 1);
+                                        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(0, -1, 1);
                                         cardLp.setMargins(dp(4), 0, dp(4), 0);
                                         currentRow.addView(card, cardLp);
                                     }
 
                                     if (eps.size() % 2 != 0 && currentRow != null) {
                                         View spacer = new View(MainActivity.this);
-                                        LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(0, dp(66), 1);
+                                        LinearLayout.LayoutParams spLp = new LinearLayout.LayoutParams(0, dp(84), 1);
                                         spLp.setMargins(dp(4), 0, dp(4), 0);
                                         currentRow.addView(spacer, spLp);
                                     }
@@ -1841,7 +1952,7 @@ public class MainActivity extends Activity {
         GradientDrawable d = new GradientDrawable();
         d.setShape(GradientDrawable.RECTANGLE);
         d.setColor(bgColor);
-        d.setCornerRadius(dp(5));
+        d.setCornerRadius(dp(8));
         if (strokeColor != 0) d.setStroke(dp(1), strokeColor);
         t.setBackgroundDrawable(d);
         t.setPadding(dp(7), dp(2), dp(7), dp(2));
@@ -1892,7 +2003,7 @@ public class MainActivity extends Activity {
                 LinearLayout item = new LinearLayout(this);
                 item.setOrientation(LinearLayout.VERTICAL);
                 item.setPadding(dp(12), dp(9), dp(12), dp(9));
-                item.setBackgroundDrawable(shape(surface, 8));
+                ThemeManager.styleStreamCard(this, item, theme, false);
 
                 // Top Badges Scroll Row
                 HorizontalScrollView badgeScroll = new HorizontalScrollView(this);
@@ -1995,9 +2106,13 @@ public class MainActivity extends Activity {
                     }
                 });
                 playBtn.setTextSize(14);
-                playBtn.setTypeface(null, 1);
-                playBtn.setBackgroundDrawable(shape(accent, 8));
-                playBtn.setTextColor(Color.WHITE);
+                if (theme != null) {
+                    ThemeManager.stylePillButton(this, playBtn, theme.primary, theme.onPrimary, 0, 0, true);
+                } else {
+                    playBtn.setTypeface(null, 1);
+                    playBtn.setBackgroundDrawable(shape(accent, 8));
+                    playBtn.setTextColor(Color.WHITE);
+                }
                 contentRow.addView(playBtn, new LinearLayout.LayoutParams(dp(140), dp(44)));
 
                 item.addView(contentRow);
@@ -2178,7 +2293,7 @@ public class MainActivity extends Activity {
     LinearLayout cardLayout() {
         LinearLayout c = new LinearLayout(this);
         c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackgroundDrawable(shape(surface, 10));
+        ThemeManager.styleSurfaceCard(this, c, theme.surfaceContainer, 14, 1, theme.outlineVariant);
         c.setPadding(dp(16), dp(14), dp(16), dp(14));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
         lp.setMargins(0, dp(6), 0, dp(6));
@@ -2186,9 +2301,39 @@ public class MainActivity extends Activity {
         return c;
     }
 
+    LinearLayout switchRow(String title, final M3Switch sw) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(4), 0, dp(4));
+
+        TextView label = text(title, 16);
+        if (theme != null) {
+            label.setTextColor(theme.onSurface);
+        }
+        label.setTypeface(null, 1);
+        row.addView(label, new LinearLayout.LayoutParams(0, -2, 1.0f));
+
+        if (theme != null) {
+            sw.setPalette(theme);
+        }
+        LinearLayout.LayoutParams swLp = new LinearLayout.LayoutParams(dp(52), dp(32));
+        swLp.setMargins(dp(12), 0, 0, 0);
+        row.addView(sw, swLp);
+
+        row.setClickable(true);
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                sw.performClick();
+            }
+        });
+        return row;
+    }
+
     View divider() {
         View d = new View(this);
-        d.setBackgroundColor(0xff222e3c);
+        d.setBackgroundColor(theme != null ? theme.outlineVariant : 0xff222e3c);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(1));
         lp.setMargins(dp(4), dp(12), dp(4), dp(12));
         d.setLayoutParams(lp);
@@ -3064,7 +3209,7 @@ public class MainActivity extends Activity {
         LinearLayout shell = new LinearLayout(this);
         shell.setOrientation(LinearLayout.VERTICAL);
         shell.setPadding(dp(18), dp(16), dp(18), dp(16));
-        shell.setBackgroundDrawable(shape(surface, 12));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
 
         TextView title = text("Create New Nuvio Profile", 18);
         title.setTypeface(null, 1);
@@ -3099,8 +3244,9 @@ public class MainActivity extends Activity {
 
         final EditText nameInput = new EditText(this);
         nameInput.setHint("Profile Name (e.g. Passenger, Kids)…");
-        nameInput.setTextColor(Color.WHITE);
-        nameInput.setBackgroundDrawable(shape(bg, 8));
+        nameInput.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        nameInput.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, nameInput, theme != null ? theme.surfaceContainerHigh : bg, 8, 1, theme != null ? theme.outlineVariant : 0);
         nameInput.setPadding(dp(12), dp(10), dp(12), dp(10));
         LinearLayout.LayoutParams nLp = new LinearLayout.LayoutParams(-1, dp(46));
         nLp.setMargins(0, dp(12), 0, dp(14));
@@ -3114,6 +3260,9 @@ public class MainActivity extends Activity {
             public void run() { d.dismiss(); }
         });
         cancel.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, cancel, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        }
         btns.addView(cancel, new LinearLayout.LayoutParams(0, dp(42), 1));
 
         Button create = btn("Create Profile", new Runnable() {
@@ -3126,9 +3275,13 @@ public class MainActivity extends Activity {
             }
         });
         create.setTextSize(13);
-        create.setTypeface(null, 1);
-        create.setBackgroundDrawable(shape(accent, 8));
-        create.setTextColor(Color.WHITE);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, create, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            create.setTypeface(null, 1);
+            create.setBackgroundDrawable(shape(accent, 8));
+            create.setTextColor(Color.WHITE);
+        }
         LinearLayout.LayoutParams crLp = new LinearLayout.LayoutParams(0, dp(42), 1);
         crLp.setMargins(dp(8), 0, 0, 0);
         btns.addView(create, crLp);
@@ -3179,8 +3332,9 @@ public class MainActivity extends Activity {
         final EditText input = new EditText(this);
         input.setHint("Enter Torbox API Key (starts with tb_)...");
         input.setText(currentKey);
-        input.setTextColor(Color.WHITE);
-        input.setBackgroundDrawable(shape(surface, 8));
+        input.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        input.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, input, theme != null ? theme.surfaceContainerHigh : surface, 8, 1, theme != null ? theme.outlineVariant : 0);
         input.setPadding(dp(14), dp(10), dp(14), dp(10));
         input.setSingleLine(true);
         LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(0, dp(48), 0.75f);
@@ -3197,9 +3351,13 @@ public class MainActivity extends Activity {
             }
         });
         saveBtn.setTextSize(13);
-        saveBtn.setTypeface(null, 1);
-        saveBtn.setBackgroundDrawable(shape(accent, 8));
-        saveBtn.setTextColor(Color.WHITE);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, saveBtn, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            saveBtn.setTypeface(null, 1);
+            saveBtn.setBackgroundDrawable(shape(accent, 8));
+            saveBtn.setTextColor(Color.WHITE);
+        }
         inputRow.addView(saveBtn, new LinearLayout.LayoutParams(0, dp(48), 0.25f));
 
         add(inputRow);
@@ -3247,8 +3405,10 @@ public class MainActivity extends Activity {
                 }
             });
             testBtn.setTextSize(12);
-            testBtn.setBackgroundDrawable(shape(surface, 6));
-            testBtn.setTextColor(accent);
+            if (theme == null) {
+                testBtn.setBackgroundDrawable(shape(surface, 6));
+                testBtn.setTextColor(accent);
+            }
             statusCard.addView(testBtn, new LinearLayout.LayoutParams(-2, dp(38)));
         }
         body.addView(statusCard);
@@ -3272,8 +3432,9 @@ public class MainActivity extends Activity {
 
         final EditText urlInput = new EditText(this);
         urlInput.setHint("https://.../manifest.json (e.g. Torrentio, CyberFlix)");
-        urlInput.setTextColor(Color.WHITE);
-        urlInput.setBackgroundDrawable(shape(surface, 8));
+        urlInput.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        urlInput.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, urlInput, theme != null ? theme.surfaceContainerHigh : surface, 8, 1, theme != null ? theme.outlineVariant : 0);
         urlInput.setPadding(dp(14), dp(10), dp(14), dp(10));
         urlInput.setSingleLine(true);
         LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(0, dp(48), 0.75f);
@@ -3318,9 +3479,13 @@ public class MainActivity extends Activity {
             }
         });
         installBtn.setTextSize(13);
-        installBtn.setTypeface(null, 1);
-        installBtn.setBackgroundDrawable(shape(accent, 8));
-        installBtn.setTextColor(Color.WHITE);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, installBtn, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            installBtn.setTypeface(null, 1);
+            installBtn.setBackgroundDrawable(shape(accent, 8));
+            installBtn.setTextColor(Color.WHITE);
+        }
         inputRow.addView(installBtn, new LinearLayout.LayoutParams(0, dp(48), 0.25f));
 
         add(inputRow);
@@ -3343,8 +3508,10 @@ public class MainActivity extends Activity {
                 }
             });
             syncBtn.setTextSize(12);
-            syncBtn.setBackgroundDrawable(shape(surface, 6));
-            syncBtn.setTextColor(accent);
+            if (theme == null) {
+                syncBtn.setBackgroundDrawable(shape(surface, 6));
+                syncBtn.setTextColor(accent);
+            }
             listHeader.addView(syncBtn, new LinearLayout.LayoutParams(-2, dp(34)));
         }
         add(listHeader);
@@ -3362,13 +3529,13 @@ public class MainActivity extends Activity {
             card.setOrientation(LinearLayout.HORIZONTAL);
             card.setGravity(Gravity.CENTER_VERTICAL);
             card.setPadding(dp(14), dp(12), dp(14), dp(12));
-            card.setBackgroundDrawable(shape(surface, 8));
+            ThemeManager.styleSurfaceCard(this, card, theme != null ? theme.surfaceContainer : surface, 8, 1, theme != null ? theme.outlineVariant : 0);
 
             LinearLayout info = new LinearLayout(this);
             info.setOrientation(LinearLayout.VERTICAL);
             TextView nm = text(name, 16);
             nm.setTypeface(null, 1);
-            nm.setTextColor(Color.WHITE);
+            nm.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
             info.addView(nm);
 
             if (!desc.isEmpty()) {
@@ -3399,8 +3566,12 @@ public class MainActivity extends Activity {
                 }
             });
             remove.setTextSize(12);
-            remove.setBackgroundDrawable(shape(0xffc0392b, 6));
-            remove.setTextColor(Color.WHITE);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, remove, theme.errorContainer, theme.onErrorContainer, 0, 0, true);
+            } else {
+                remove.setBackgroundDrawable(shape(0xffc0392b, 6));
+                remove.setTextColor(Color.WHITE);
+            }
             LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(dp(84), dp(38));
             btnLp.setMargins(dp(10), 0, 0, 0);
             card.addView(remove, btnLp);
@@ -3426,9 +3597,10 @@ public class MainActivity extends Activity {
 
         final EditText searchInput = new EditText(this);
         searchInput.setHint("Search title (e.g. Inception, Breaking Bad, Dune)…");
-        searchInput.setTextColor(Color.WHITE);
-        searchInput.setBackgroundDrawable(shape(surface, 8));
-        searchInput.setPadding(dp(14), dp(10), dp(14), dp(10));
+        searchInput.setTextColor(theme.onSurface);
+        searchInput.setHintTextColor(theme.onSurfaceVariant);
+        ThemeManager.styleSurfaceCard(this, searchInput, theme.surfaceContainerHigh, 24, 1, theme.outlineVariant);
+        searchInput.setPadding(dp(18), dp(10), dp(18), dp(10));
         searchInput.setSingleLine(true);
         LinearLayout.LayoutParams inputLp = new LinearLayout.LayoutParams(0, dp(48), 0.75f);
         inputLp.setMargins(0, 0, dp(10), 0);
@@ -3531,9 +3703,7 @@ public class MainActivity extends Activity {
             }
         });
         doSearch.setTextSize(14);
-        doSearch.setTypeface(null, 1);
-        doSearch.setBackgroundDrawable(shape(accent, 8));
-        doSearch.setTextColor(Color.WHITE);
+        ThemeManager.stylePillButton(this, doSearch, theme.primary, theme.onPrimary, 0, 0, true);
         inputRow.addView(doSearch, new LinearLayout.LayoutParams(0, dp(48), 0.25f));
 
         add(inputRow);
@@ -3566,14 +3736,48 @@ public class MainActivity extends Activity {
         add(heading);
         add(text("Choose how Nuvio behaves on this Gen5W automotive unit.", 14));
 
+        // 0. Material Design 3 Automotive Theme Selector Card
+        LinearLayout themeCard = cardLayout();
+        TextView themeHeader = text("Material Design 3 Theme", 18);
+        themeHeader.setTypeface(null, 1);
+        themeHeader.setTextColor(accent);
+        themeCard.addView(themeHeader);
+
+        TextView themeDesc = text("Select an automotive tonal palette to match your vehicle's interior lighting and display.", 13);
+        themeDesc.setTextColor(muted);
+        themeDesc.setPadding(0, dp(2), 0, dp(8));
+        themeCard.addView(themeDesc);
+
+        LinearLayout themeButtonsRow = new LinearLayout(this);
+        themeButtonsRow.setOrientation(LinearLayout.HORIZONTAL);
+        HorizontalScrollView themeScroll = new HorizontalScrollView(this);
+        themeScroll.setHorizontalScrollBarEnabled(false);
+        themeScroll.addView(themeButtonsRow);
+
+        for (final ThemeManager.Palette p : ThemeManager.getPalettes()) {
+            final boolean isCurrent = p.id.equals(theme.id);
+            Button themeBtn = btn(p.displayName, new Runnable() {
+                @Override
+                public void run() {
+                    ThemeManager.savePalette(MainActivity.this, p);
+                    loadActiveTheme();
+                    render("Settings", false);
+                    Toast.makeText(MainActivity.this, "Applied " + p.displayName + " theme", Toast.LENGTH_SHORT).show();
+                }
+            });
+            ThemeManager.styleFilterChip(this, themeBtn, theme, p.displayName, isCurrent);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(38));
+            lp.setMargins(0, 0, dp(8), 0);
+            themeButtonsRow.addView(themeBtn, lp);
+        }
+        themeCard.addView(themeScroll);
+        body.addView(themeCard);
+
         // 1. Vehicle Motion Lockout Card
         LinearLayout motionCard = cardLayout();
-        final Switch motion = new Switch(this);
-        motion.setText("Vehicle Motion Lockout (GPS)");
-        motion.setTextColor(Color.WHITE);
-        motion.setTextSize(17);
+        final M3Switch motion = new M3Switch(this);
         motion.setChecked(prefs.getBoolean("motion_lockout", false));
-        motionCard.addView(motion);
+        motionCard.addView(switchRow("Vehicle Motion Lockout (GPS)", motion));
 
         final TextView motionStatusText = text(motion.isChecked() ? motionReason : "Motion lockout is off.", 13);
         motionStatusText.setTextColor(accent);
@@ -3584,9 +3788,9 @@ public class MainActivity extends Activity {
         motionDesc.setTextColor(muted);
         motionCard.addView(motionDesc);
 
-        motion.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+        motion.setOnCheckedChangeListener(new M3Switch.OnCheckedChangeListener() {
             @Override
-            public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+            public void onCheckedChanged(M3Switch view, boolean isChecked) {
                 prefs.edit().putBoolean("motion_lockout", isChecked).apply();
                 updateMotionMonitoring();
                 motionStatusText.setText(isChecked ? motionReason : "Motion lockout is off.");
@@ -3596,21 +3800,18 @@ public class MainActivity extends Activity {
 
         // 2. Safety Popups Card
         LinearLayout popupCard = cardLayout();
-        final Switch popup = new Switch(this);
-        popup.setText("Disable Parked Reminder Popup");
-        popup.setTextColor(Color.WHITE);
-        popup.setTextSize(17);
+        final M3Switch popup = new M3Switch(this);
         popup.setChecked(prefs.getBoolean("disable_popup", false));
-        popupCard.addView(popup);
+        popupCard.addView(switchRow("Disable Parked Reminder Popup", popup));
 
         TextView popupDesc = text("Hide the one-time parked-use reminder popup when launching Nuvio. This preference will be remembered across boots.", 13);
         popupDesc.setTextColor(muted);
         popupDesc.setPadding(0, dp(4), 0, 0);
         popupCard.addView(popupDesc);
 
-        popup.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+        popup.setOnCheckedChangeListener(new M3Switch.OnCheckedChangeListener() {
             @Override
-            public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+            public void onCheckedChanged(M3Switch view, boolean isChecked) {
                 prefs.edit().putBoolean("disable_popup", isChecked).apply();
                 parkedConfirmed = isChecked;
             }
@@ -3620,21 +3821,18 @@ public class MainActivity extends Activity {
         // 3. Network Guard & Modem Routing Card
         LinearLayout modemCard = cardLayout();
         final SharedPreferences netPrefs = getSharedPreferences("network", 0);
-        final Switch modemSwitch = new Switch(this);
-        modemSwitch.setText("Use Internal Car Modem");
-        modemSwitch.setTextColor(Color.WHITE);
-        modemSwitch.setTextSize(17);
+        final M3Switch modemSwitch = new M3Switch(this);
         modemSwitch.setChecked(netPrefs.getBoolean("use_internal_modem", false));
-        modemCard.addView(modemSwitch);
+        modemCard.addView(switchRow("Use Internal Car Modem", modemSwitch));
 
         TextView modemDesc = text("OFF (Default): Wi-Fi and Bluetooth/phone hotspots only. Protects your car's built-in Telematics data subscription.\nON: Allow Android to use the car's internal modem. The NEMESIS network guard applies rules automatically.", 13);
         modemDesc.setTextColor(muted);
         modemDesc.setPadding(0, dp(4), 0, 0);
         modemCard.addView(modemDesc);
 
-        modemSwitch.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+        modemSwitch.setOnCheckedChangeListener(new M3Switch.OnCheckedChangeListener() {
             @Override
-            public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+            public void onCheckedChanged(M3Switch view, boolean isChecked) {
                 netPrefs.edit().putBoolean("use_internal_modem", isChecked).commit();
                 Toast.makeText(MainActivity.this, isChecked ?
                         "Car modem requested (NEMESIS netguard removing firewall)." :
@@ -3654,16 +3852,13 @@ public class MainActivity extends Activity {
         plDesc.setPadding(0, dp(4), 0, dp(6));
         playerCard.addView(plDesc);
 
-        final Switch vlcSwitch = new Switch(this);
-        vlcSwitch.setText("Enable External VLC Player Option");
-        vlcSwitch.setTextColor(Color.WHITE);
-        vlcSwitch.setTextSize(15);
+        final M3Switch vlcSwitch = new M3Switch(this);
         vlcSwitch.setChecked(prefs.getBoolean("vlc_integration", false));
-        playerCard.addView(vlcSwitch);
+        playerCard.addView(switchRow("Enable External VLC Player Option", vlcSwitch));
 
-        vlcSwitch.setOnCheckedChangeListener(new android.widget.CompoundButton.OnCheckedChangeListener() {
+        vlcSwitch.setOnCheckedChangeListener(new M3Switch.OnCheckedChangeListener() {
             @Override
-            public void onCheckedChanged(android.widget.CompoundButton buttonView, boolean isChecked) {
+            public void onCheckedChanged(M3Switch view, boolean isChecked) {
                 prefs.edit().putBoolean("vlc_integration", isChecked).apply();
             }
         });
@@ -3689,8 +3884,10 @@ public class MainActivity extends Activity {
                 playDirect("asset:///test_avc.mp4", "Local Test Clip (H.264 Baseline)");
             }
         });
-        testBtn1.setBackgroundDrawable(shape(surface, 6));
-        testBtn1.setTextColor(Color.WHITE);
+        if (theme == null) {
+            testBtn1.setBackgroundDrawable(shape(surface, 6));
+            testBtn1.setTextColor(Color.WHITE);
+        }
         testRow.addView(testBtn1, new LinearLayout.LayoutParams(-2, dp(38)));
 
         Button testBtn2 = btn("▶ Test MPEG-4 (Offline Clip)", new Runnable() {
@@ -3699,8 +3896,10 @@ public class MainActivity extends Activity {
                 playDirect("asset:///test_mpeg4.mp4", "Local Test Clip (MPEG-4)");
             }
         });
-        testBtn2.setBackgroundDrawable(shape(surface, 6));
-        testBtn2.setTextColor(Color.WHITE);
+        if (theme == null) {
+            testBtn2.setBackgroundDrawable(shape(surface, 6));
+            testBtn2.setTextColor(Color.WHITE);
+        }
         LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(-2, dp(38));
         lp2.leftMargin = dp(8);
         testRow.addView(testBtn2, lp2);
@@ -3711,8 +3910,10 @@ public class MainActivity extends Activity {
                 playDirect("https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8", "Apple BipBop (HLS Adaptive Stream)");
             }
         });
-        testBtn3.setBackgroundDrawable(shape(surface, 6));
-        testBtn3.setTextColor(Color.WHITE);
+        if (theme == null) {
+            testBtn3.setBackgroundDrawable(shape(surface, 6));
+            testBtn3.setTextColor(Color.WHITE);
+        }
         LinearLayout.LayoutParams lp3 = new LinearLayout.LayoutParams(-2, dp(38));
         lp3.leftMargin = dp(8);
         testRow.addView(testBtn3, lp3);
@@ -3766,8 +3967,10 @@ public class MainActivity extends Activity {
             }
         });
         clearBtn.setTextSize(13);
-        clearBtn.setBackgroundDrawable(shape(surface, 6));
-        clearBtn.setTextColor(accent);
+        if (theme == null) {
+            clearBtn.setBackgroundDrawable(shape(surface, 6));
+            clearBtn.setTextColor(accent);
+        }
         storageCard.addView(clearBtn, new LinearLayout.LayoutParams(-2, dp(40)));
         body.addView(storageCard);
     }
@@ -3814,7 +4017,7 @@ public class MainActivity extends Activity {
         sTitle.setTextColor(accent);
         sysCard.addView(sTitle);
 
-        String buildInfo = "App: Nuvio Auto v1.0.0 (Native KitKat single-DEX)\n" +
+        String buildInfo = "App: Nuvio Auto v1.0.1 (Native KitKat single-DEX)\n" +
                 "Author: Saurabh Nakkarike (@snakkarike)\n" +
                 "OS: Android 4.4.2 KitKat (API 19)\n" +
                 "Architecture: " + android.os.Build.CPU_ABI + "\n" +
@@ -3851,7 +4054,7 @@ public class MainActivity extends Activity {
         netCard.addView(nBody);
 
         final TextView ipText = text("Public IP: Tap below to test internet routing…", 13);
-        ipText.setTextColor(Color.WHITE);
+        ipText.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
         netCard.addView(ipText);
 
         Button checkIp = btn("🌐 Test Public IP & DNS Route", new Runnable() {
@@ -3883,8 +4086,10 @@ public class MainActivity extends Activity {
             }
         });
         checkIp.setTextSize(12);
-        checkIp.setBackgroundDrawable(shape(surface, 6));
-        checkIp.setTextColor(accent);
+        if (theme == null) {
+            checkIp.setBackgroundDrawable(shape(surface, 6));
+            checkIp.setTextColor(accent);
+        }
         netCard.addView(checkIp, new LinearLayout.LayoutParams(-2, dp(38)));
         body.addView(netCard);
 
@@ -3931,8 +4136,10 @@ public class MainActivity extends Activity {
             }
         });
         testCinemeta.setTextSize(12);
-        testCinemeta.setBackgroundDrawable(shape(surface, 6));
-        testCinemeta.setTextColor(accent);
+        if (theme == null) {
+            testCinemeta.setBackgroundDrawable(shape(surface, 6));
+            testCinemeta.setTextColor(accent);
+        }
         LinearLayout.LayoutParams lp1 = new LinearLayout.LayoutParams(-2, dp(38));
         lp1.setMargins(0, 0, dp(8), 0);
         apiBtns.addView(testCinemeta, lp1);
@@ -3975,8 +4182,10 @@ public class MainActivity extends Activity {
             }
         });
         testNuvio.setTextSize(12);
-        testNuvio.setBackgroundDrawable(shape(surface, 6));
-        testNuvio.setTextColor(accent);
+        if (theme == null) {
+            testNuvio.setBackgroundDrawable(shape(surface, 6));
+            testNuvio.setTextColor(accent);
+        }
         LinearLayout.LayoutParams lp2 = new LinearLayout.LayoutParams(-2, dp(38));
         lp2.setMargins(0, 0, dp(8), 0);
         apiBtns.addView(testNuvio, lp2);
@@ -4024,8 +4233,10 @@ public class MainActivity extends Activity {
             }
         });
         showLicBtn.setTextSize(12);
-        showLicBtn.setBackgroundDrawable(shape(surface, 6));
-        showLicBtn.setTextColor(Color.WHITE);
+        if (theme == null) {
+            showLicBtn.setBackgroundDrawable(shape(surface, 6));
+            showLicBtn.setTextColor(Color.WHITE);
+        }
         licenseCard.addView(showLicBtn, new LinearLayout.LayoutParams(-2, dp(38)));
         body.addView(licenseCard);
     }
@@ -4035,9 +4246,12 @@ public class MainActivity extends Activity {
         builder.setTitle("Open Source Licenses");
         ScrollView sv = new ScrollView(this);
         sv.setPadding(dp(16), dp(10), dp(16), dp(10));
+        if (theme != null) {
+            sv.setBackgroundColor(theme.surfaceContainer);
+        }
         TextView tv = new TextView(this);
         tv.setTextSize(12);
-        tv.setTextColor(Color.WHITE);
+        tv.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
         tv.setText(
             "Nuvio Auto (Nuvio on GEN5W)\n" +
             "Copyright (c) 2026 Saurabh Nakkarike (https://github.com/snakkarike)\n" +
@@ -4085,7 +4299,7 @@ public class MainActivity extends Activity {
                 lTitle.setTextColor(0xffe74c3c);
                 legacyNotice.addView(lTitle);
                 TextView lDesc = text("You were previously signed in with Stremio. Nuvio user profiles and continue-watching sync require a Nuvio account (api.nuvio.tv). Please sign in with your Nuvio credentials below.", 13);
-                lDesc.setTextColor(Color.WHITE);
+                lDesc.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
                 lDesc.setPadding(0, dp(4), 0, 0);
                 legacyNotice.addView(lDesc);
                 body.addView(legacyNotice);
@@ -4105,8 +4319,9 @@ public class MainActivity extends Activity {
 
             final EditText serverIn = new EditText(this);
             serverIn.setText(getNuvioApiUrl());
-            serverIn.setTextColor(Color.WHITE);
-            serverIn.setBackgroundDrawable(shape(bg, 6));
+            serverIn.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+            serverIn.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+            ThemeManager.styleSurfaceCard(this, serverIn, theme != null ? theme.surfaceContainerHigh : bg, 6, 1, theme != null ? theme.outlineVariant : 0);
             serverIn.setPadding(dp(12), dp(8), dp(12), dp(8));
             serverIn.setSingleLine(true);
             sRow.addView(serverIn, new LinearLayout.LayoutParams(0, dp(44), 0.75f));
@@ -4140,8 +4355,9 @@ public class MainActivity extends Activity {
 
             final EditText emailIn = new EditText(this);
             emailIn.setHint("Email (e.g. user@nuvio.tv)…");
-            emailIn.setTextColor(Color.WHITE);
-            emailIn.setBackgroundDrawable(shape(bg, 6));
+            emailIn.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+            emailIn.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+            ThemeManager.styleSurfaceCard(this, emailIn, theme != null ? theme.surfaceContainerHigh : bg, 6, 1, theme != null ? theme.outlineVariant : 0);
             emailIn.setPadding(dp(14), dp(10), dp(14), dp(10));
             emailIn.setSingleLine(true);
             LinearLayout.LayoutParams eLp = new LinearLayout.LayoutParams(-1, dp(46));
@@ -4150,9 +4366,10 @@ public class MainActivity extends Activity {
 
             final EditText passIn = new EditText(this);
             passIn.setHint("Password…");
-            passIn.setTextColor(Color.WHITE);
+            passIn.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+            passIn.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
             passIn.setInputType(129); // textPassword
-            passIn.setBackgroundDrawable(shape(bg, 6));
+            ThemeManager.styleSurfaceCard(this, passIn, theme != null ? theme.surfaceContainerHigh : bg, 6, 1, theme != null ? theme.outlineVariant : 0);
             passIn.setPadding(dp(14), dp(10), dp(14), dp(10));
             passIn.setSingleLine(true);
             LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-1, dp(46));
@@ -4175,9 +4392,13 @@ public class MainActivity extends Activity {
                 }
             });
             loginBtn.setTextSize(14);
-            loginBtn.setTypeface(null, 1);
-            loginBtn.setBackgroundDrawable(shape(accent, 8));
-            loginBtn.setTextColor(Color.WHITE);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, loginBtn, theme.primary, theme.onPrimary, 0, 0, true);
+            } else {
+                loginBtn.setTypeface(null, 1);
+                loginBtn.setBackgroundDrawable(shape(accent, 8));
+                loginBtn.setTextColor(Color.WHITE);
+            }
             loginCard.addView(loginBtn, new LinearLayout.LayoutParams(-1, dp(46)));
             body.addView(loginCard);
 
@@ -4199,8 +4420,9 @@ public class MainActivity extends Activity {
 
             final EditText tokenIn = new EditText(this);
             tokenIn.setHint("Paste Nuvio JWT Token (eyJhbGciOi...)");
-            tokenIn.setTextColor(Color.WHITE);
-            tokenIn.setBackgroundDrawable(shape(bg, 6));
+            tokenIn.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+            tokenIn.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+            ThemeManager.styleSurfaceCard(this, tokenIn, theme != null ? theme.surfaceContainerHigh : bg, 6, 1, theme != null ? theme.outlineVariant : 0);
             tokenIn.setPadding(dp(12), dp(8), dp(12), dp(8));
             tokenIn.setSingleLine(true);
             tRow.addView(tokenIn, new LinearLayout.LayoutParams(0, dp(44), 0.75f));
@@ -4217,9 +4439,13 @@ public class MainActivity extends Activity {
                 }
             });
             saveTokenBtn.setTextSize(12);
-            saveTokenBtn.setTypeface(null, 1);
-            saveTokenBtn.setBackgroundDrawable(shape(accent, 6));
-            saveTokenBtn.setTextColor(Color.WHITE);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, saveTokenBtn, theme.primary, theme.onPrimary, 0, 0, true);
+            } else {
+                saveTokenBtn.setTypeface(null, 1);
+                saveTokenBtn.setBackgroundDrawable(shape(accent, 6));
+                saveTokenBtn.setTextColor(Color.WHITE);
+            }
             LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(0, dp(44), 0.25f);
             stLp.setMargins(dp(8), 0, 0, 0);
             tRow.addView(saveTokenBtn, stLp);
@@ -4258,24 +4484,28 @@ public class MainActivity extends Activity {
         headerRow.setGravity(Gravity.CENTER_VERTICAL);
 
         FrameLayout avBox = new FrameLayout(this);
-        avBox.setBackgroundDrawable(circleShape(surface, accent, 2));
+        if (theme != null) {
+            ThemeManager.styleSurfaceCard(this, avBox, theme.primaryContainer, 28, 2, theme.primary);
+        } else {
+            avBox.setBackgroundDrawable(circleShape(surface, accent, 2));
+        }
 
         ImageView avImg = new ImageView(this);
         avImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
 
         TextView avFallback = text(!activeAvatar.startsWith("http") && !activeAvatar.isEmpty() ? activeAvatar : (!activeName.isEmpty() ? activeName.substring(0, 1).toUpperCase(Locale.US) : "👤"), 22);
         avFallback.setGravity(Gravity.CENTER);
-        avFallback.setTextColor(accent);
+        avFallback.setTextColor(theme != null ? theme.onPrimaryContainer : accent);
         avFallback.setTypeface(null, 1);
         avBox.addView(avFallback, new FrameLayout.LayoutParams(-1, -1));
-        avBox.addView(avImg, new FrameLayout.LayoutParams(dp(52), dp(52)));
+        avBox.addView(avImg, new FrameLayout.LayoutParams(dp(56), dp(56)));
         avImg.setTag(avFallback);
 
         if (activeAvatar.startsWith("http")) {
             loadAvatar(avImg, activeAvatar);
         }
 
-        LinearLayout.LayoutParams avBoxLp = new LinearLayout.LayoutParams(dp(52), dp(52));
+        LinearLayout.LayoutParams avBoxLp = new LinearLayout.LayoutParams(dp(56), dp(56));
         avBoxLp.setMargins(0, 0, dp(14), 0);
         headerRow.addView(avBox, avBoxLp);
 
@@ -4284,14 +4514,21 @@ public class MainActivity extends Activity {
 
         TextView pTitle = text(activeName, 20);
         pTitle.setTypeface(null, 1);
-        pTitle.setTextColor(Color.WHITE);
+        pTitle.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
         nameCol.addView(pTitle);
 
         TextView pSub = text("Active Nuvio Profile on this Head Unit", 13);
-        pSub.setTextColor(accent);
+        pSub.setTextColor(theme != null ? theme.onSurfaceVariant : accent);
         nameCol.addView(pSub);
 
         headerRow.addView(nameCol, new LinearLayout.LayoutParams(0, -2, 1));
+
+        if (theme != null) {
+            TextView actBadge = badge("✓ ACTIVE", theme.primaryContainer, theme.onPrimaryContainer, 0);
+            actBadge.setTextSize(12);
+            actBadge.setPadding(dp(12), dp(6), dp(12), dp(6));
+            headerRow.addView(actBadge, new LinearLayout.LayoutParams(-2, -2));
+        }
         currentCard.addView(headerRow);
         body.addView(currentCard);
 
@@ -4323,37 +4560,68 @@ public class MainActivity extends Activity {
             final String pAv = resolveAvatarUrl(p);
             final boolean isCurrent = pId.equals(activeId);
 
-            LinearLayout pCard = new LinearLayout(this);
+            final LinearLayout pCard = new LinearLayout(this);
             pCard.setOrientation(LinearLayout.VERTICAL);
             pCard.setGravity(Gravity.CENTER);
-            pCard.setPadding(dp(16), dp(12), dp(16), dp(12));
-            pCard.setBackgroundDrawable(shape(isCurrent ? 0xff2a1a3e : surface, 8));
+            pCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+            pCard.setClickable(true);
+            pCard.setFocusable(true);
+            if (theme != null) {
+                if (isCurrent) {
+                    ThemeManager.styleInteractiveCard(this, pCard, theme.primaryContainer, theme.primary, 14, 2, theme.primary);
+                } else {
+                    ThemeManager.styleInteractiveCard(this, pCard, theme.surfaceContainerHigh, theme.onSurface, 14, 1, theme.outlineVariant);
+                }
+            } else {
+                pCard.setBackgroundDrawable(shape(isCurrent ? 0xff2a1a3e : surface, 14));
+            }
 
             FrameLayout pAvBox = new FrameLayout(this);
-            pAvBox.setBackgroundDrawable(circleShape(isCurrent ? 0xff241436 : surface, isCurrent ? accent : 0xff232b38, isCurrent ? 2 : 1));
+            if (theme != null) {
+                ThemeManager.styleSurfaceCard(this, pAvBox, isCurrent ? theme.primary : theme.surfaceContainerHighest, 26, isCurrent ? 2 : 1, isCurrent ? theme.onPrimary : theme.outlineVariant);
+            } else {
+                pAvBox.setBackgroundDrawable(circleShape(isCurrent ? 0xff241436 : surface, isCurrent ? accent : 0xff232b38, isCurrent ? 2 : 1));
+            }
 
             ImageView pAvImg = new ImageView(this);
             pAvImg.setScaleType(ImageView.ScaleType.FIT_CENTER);
 
-            TextView pAvFallback = text(!pAv.startsWith("http") && !pAv.isEmpty() ? pAv : (!pNm.isEmpty() ? pNm.substring(0, 1).toUpperCase(Locale.US) : "👤"), 18);
+            TextView pAvFallback = text(!pAv.startsWith("http") && !pAv.isEmpty() ? pAv : (!pNm.isEmpty() ? pNm.substring(0, 1).toUpperCase(Locale.US) : "👤"), 20);
             pAvFallback.setGravity(Gravity.CENTER);
-            pAvFallback.setTextColor(isCurrent ? accent : Color.WHITE);
+            if (theme != null) {
+                pAvFallback.setTextColor(isCurrent ? theme.onPrimary : theme.onSurface);
+            } else {
+                pAvFallback.setTextColor(isCurrent ? accent : Color.WHITE);
+            }
             pAvFallback.setTypeface(null, 1);
             pAvBox.addView(pAvFallback, new FrameLayout.LayoutParams(-1, -1));
-            pAvBox.addView(pAvImg, new FrameLayout.LayoutParams(dp(44), dp(44)));
+            pAvBox.addView(pAvImg, new FrameLayout.LayoutParams(dp(52), dp(52)));
             pAvImg.setTag(pAvFallback);
 
             if (pAv.startsWith("http")) {
                 loadAvatar(pAvImg, pAv);
             }
 
-            pCard.addView(pAvBox, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            pCard.addView(pAvBox, new LinearLayout.LayoutParams(dp(52), dp(52)));
 
             TextView nm = text(pNm, 14);
             nm.setTypeface(null, 1);
-            nm.setTextColor(isCurrent ? accent : Color.WHITE);
-            nm.setPadding(0, dp(6), 0, dp(6));
+            if (theme != null) {
+                nm.setTextColor(isCurrent ? theme.onPrimaryContainer : theme.onSurface);
+            } else {
+                nm.setTextColor(isCurrent ? accent : Color.WHITE);
+            }
+            nm.setSingleLine(true);
+            nm.setEllipsize(TextUtils.TruncateAt.END);
+            nm.setPadding(0, dp(8), 0, dp(8));
             pCard.addView(nm);
+
+            final View.OnClickListener switchListener = new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    if (!isCurrent) switchNuvioProfile(pId, pNm, pAv);
+                }
+            };
 
             Button selBtn = btn(isCurrent ? "✓ Active" : "Select", new Runnable() {
                 @Override
@@ -4362,18 +4630,26 @@ public class MainActivity extends Activity {
                 }
             });
             selBtn.setTextSize(12);
-            selBtn.setEnabled(!isCurrent);
-            if (isCurrent) {
+            if (theme != null) {
+                if (isCurrent) {
+                    ThemeManager.stylePillButton(this, selBtn, theme.primary, theme.onPrimary, 0, 0, true);
+                } else {
+                    ThemeManager.stylePillButton(this, selBtn, theme.surfaceContainerHighest, theme.onSurface, 1, theme.outlineVariant, false);
+                }
+            } else if (isCurrent) {
                 selBtn.setBackgroundDrawable(shape(accent, 6));
                 selBtn.setTextColor(Color.WHITE);
             } else {
                 selBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
                 selBtn.setTextColor(Color.WHITE);
             }
-            pCard.addView(selBtn, new LinearLayout.LayoutParams(dp(90), dp(34)));
+            selBtn.setOnClickListener(switchListener);
+            pCard.addView(selBtn, new LinearLayout.LayoutParams(dp(96), dp(34)));
 
-            LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-2, -2);
-            pLp.setMargins(0, 0, dp(10), 0);
+            pCard.setOnClickListener(switchListener);
+
+            LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(dp(136), dp(172));
+            pLp.setMargins(0, 0, dp(12), 0);
             row.addView(pCard, pLp);
         }
 
@@ -4381,17 +4657,39 @@ public class MainActivity extends Activity {
         LinearLayout addCard = new LinearLayout(this);
         addCard.setOrientation(LinearLayout.VERTICAL);
         addCard.setGravity(Gravity.CENTER);
-        addCard.setPadding(dp(16), dp(12), dp(16), dp(12));
-        addCard.setBackgroundDrawable(shape(surface, 8));
+        addCard.setPadding(dp(16), dp(16), dp(16), dp(16));
+        addCard.setClickable(true);
+        addCard.setFocusable(true);
+        if (theme != null) {
+            ThemeManager.styleInteractiveCard(this, addCard, theme.surfaceContainer, theme.onSurface, 14, 1, theme.outlineVariant);
+        } else {
+            addCard.setBackgroundDrawable(shape(surface, 14));
+        }
 
-        TextView plus = text("＋", 26);
-        plus.setTextColor(accent);
-        addCard.addView(plus);
+        FrameLayout addAvBox = new FrameLayout(this);
+        if (theme != null) {
+            ThemeManager.styleSurfaceCard(this, addAvBox, theme.surfaceContainerHighest, 26, 1, theme.outlineVariant);
+        } else {
+            addAvBox.setBackgroundDrawable(circleShape(surface, accent, 1));
+        }
+        TextView plus = text("＋", 24);
+        plus.setGravity(Gravity.CENTER);
+        plus.setTextColor(theme != null ? theme.primary : accent);
+        addAvBox.addView(plus, new FrameLayout.LayoutParams(-1, -1));
+        addCard.addView(addAvBox, new LinearLayout.LayoutParams(dp(52), dp(52)));
 
         TextView addLbl = text("New Profile", 14);
-        addLbl.setTextColor(muted);
-        addLbl.setPadding(0, dp(4), 0, dp(6));
+        addLbl.setTypeface(null, 1);
+        addLbl.setTextColor(theme != null ? theme.onSurface : muted);
+        addLbl.setPadding(0, dp(8), 0, dp(8));
         addCard.addView(addLbl);
+
+        final View.OnClickListener addListener = new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showAddProfileDialog();
+            }
+        };
 
         Button addBtn = btn("Create", new Runnable() {
             @Override
@@ -4400,10 +4698,18 @@ public class MainActivity extends Activity {
             }
         });
         addBtn.setTextSize(12);
-        addBtn.setBackgroundDrawable(shape(surface, 6));
-        addBtn.setTextColor(accent);
-        addCard.addView(addBtn, new LinearLayout.LayoutParams(dp(90), dp(34)));
-        row.addView(addCard);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, addBtn, theme.surfaceContainerHighest, theme.primary, 1, theme.outlineVariant, false);
+        } else {
+            addBtn.setBackgroundDrawable(shape(surface, 6));
+            addBtn.setTextColor(accent);
+        }
+        addBtn.setOnClickListener(addListener);
+        addCard.addView(addBtn, new LinearLayout.LayoutParams(dp(96), dp(34)));
+        addCard.setOnClickListener(addListener);
+
+        LinearLayout.LayoutParams addLp = new LinearLayout.LayoutParams(dp(136), dp(172));
+        row.addView(addCard, addLp);
 
         scroll.addView(row);
         switchCard.addView(scroll);
@@ -4434,8 +4740,12 @@ public class MainActivity extends Activity {
             }
         });
         syncBtn.setTextSize(13);
-        syncBtn.setBackgroundDrawable(shape(accent, 6));
-        syncBtn.setTextColor(Color.WHITE);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, syncBtn, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            syncBtn.setBackgroundDrawable(shape(accent, 6));
+            syncBtn.setTextColor(Color.WHITE);
+        }
         LinearLayout.LayoutParams b1 = new LinearLayout.LayoutParams(-2, dp(40));
         b1.setMargins(0, 0, dp(10), 0);
         btnRow.addView(syncBtn, b1);
@@ -4447,8 +4757,12 @@ public class MainActivity extends Activity {
             }
         });
         signOutBtn.setTextSize(13);
-        signOutBtn.setBackgroundDrawable(shape(0xffc0392b, 6));
-        signOutBtn.setTextColor(Color.WHITE);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, signOutBtn, theme.errorContainer, theme.onErrorContainer, 0, 0, true);
+        } else {
+            signOutBtn.setBackgroundDrawable(shape(0xffc0392b, 6));
+            signOutBtn.setTextColor(Color.WHITE);
+        }
         btnRow.addView(signOutBtn, new LinearLayout.LayoutParams(-2, dp(40)));
 
         actionCard.addView(btnRow);
@@ -4689,7 +5003,7 @@ public class MainActivity extends Activity {
     TextView text(String str, int sp) {
         TextView t = new TextView(this);
         t.setText(str);
-        t.setTextColor(Color.WHITE);
+        t.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
         t.setTextSize(sp);
         t.setPadding(dp(4), dp(2), dp(4), dp(2));
         return t;
@@ -4699,8 +5013,12 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setText(label);
         b.setTextSize(13);
-        b.setTextColor(Color.WHITE);
-        b.setBackgroundDrawable(shape(surface, 8));
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, b, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        } else {
+            b.setTextColor(Color.WHITE);
+            b.setBackgroundDrawable(shape(surface, 8));
+        }
         b.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
