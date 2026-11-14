@@ -50,6 +50,19 @@ This project adapts Nuvio for the Hyundai Motor Group (HMG) **Gen5W** infotainme
 
 ---
 
+## Acknowledgments & Community Credits
+
+Special thanks to the pioneering developers of the Gen5W open-source ecosystem, whose tools and reference code made this port possible:
+
+- **Sean Kramer ([KramerTech / gen5-codec-patch](https://github.com/KramerTech/gen5-codec-patch)):** For the critical platform video codec fix on Telechips TCC803x hardware and the `gen5-SmartTube` network guard architecture.
+- **ntwm787 ([Jellyfin-on-GEN5W](https://github.com/ntwm787/Jellyfin-on-GEN5W) & [KeyBORD-Gen5W](https://github.com/ntwm787/KeyBORD-Gen5W)):** For pioneering native Android 4.4 ExoPlayer playback, vehicle video safety gating, and virtual keyboard activation on Gen5W.
+- **guod5 ([Stremio-gen5-hmg-nemesis](https://github.com/guod5/Stremio-gen5-hmg-nemesis)):** For the automated NEMESIS USB autorun installer script (`NEMESIS.sh`), clean re-installation workflows, and release automation patterns.
+- **xwtk ([hmg_nemesis](https://github.com/xwtk/hmg_nemesis)):** For the NEMESIS root package manager on Hyundai/Kia head units.
+
+For complete attribution details, see [CREDITS.md](CREDITS.md).
+
+---
+
 ## License
 
 This project is licensed under the [GNU General Public License v3.0 (GPL-3.0)](LICENSE) — Copyright (C) 2026 Saurabh Nakkarike.

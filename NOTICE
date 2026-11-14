@@ -62,3 +62,12 @@ copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
+
+================================================================================
+Gen5W Ecosystem Acknowledgments & References
+This project acknowledges and expresses gratitude to the following reference projects:
+- KramerTech / gen5-codec-patch (Sean Kramer) - MIT License
+- Jellyfin-on-GEN5W & KeyBORD-Gen5W (ntwm787) - GPL-2.0
+- Stremio-gen5-hmg-nemesis (guod5)
+- hmg_nemesis (xwtk)
+See CREDITS.md for full details.
