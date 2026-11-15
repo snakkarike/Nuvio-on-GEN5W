@@ -13,6 +13,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
 import android.media.AudioManager;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.Gravity;
@@ -91,6 +92,9 @@ public class ExoPlayerActivity extends Activity {
     private MotionGuard motionGuard;
     private Dialog motionDialog;
     private TextView motionDialogText;
+    private VehicleVideoGate vehicleGate;
+    private FrameLayout safetyLockoutOverlay;
+    private TextView safetyLockoutText;
     private float savedWindowBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
     private boolean manualAudioSelected = false;
     private String selectedEnglishTrackKey = "";
@@ -348,6 +352,14 @@ public class ExoPlayerActivity extends Activity {
         super.onCreate(savedInstanceState);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if (Build.VERSION.SDK_INT >= 19) {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            );
+        }
 
         theme = ThemeManager.loadSavedPalette(this);
 
@@ -541,6 +553,54 @@ public class ExoPlayerActivity extends Activity {
         FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(-2, -2, Gravity.CENTER);
         slp.setMargins(dp(30), 0, dp(30), 0);
         root.addView(status, slp);
+
+        // Safety Lockout Overlay (fail-closed park gate for Gen5W)
+        safetyLockoutOverlay = new FrameLayout(this);
+        safetyLockoutOverlay.setBackgroundColor(0xF0000000);
+        safetyLockoutOverlay.setVisibility(View.GONE);
+
+        LinearLayout lockCard = new LinearLayout(this);
+        lockCard.setOrientation(LinearLayout.VERTICAL);
+        lockCard.setGravity(Gravity.CENTER);
+        lockCard.setPadding(dp(32), dp(24), dp(32), dp(24));
+        if (theme != null) {
+            ThemeManager.styleSurfaceCard(this, lockCard, theme.surfaceContainerHighest, 16, 2, 0xFFFF5252);
+        } else {
+            lockCard.setBackgroundDrawable(pill(0xFF1E222B, 0xFFFF5252, 16));
+        }
+
+        TextView lockTitle = text("⚠️ VIDEO LOCKED FOR VEHICLE SAFETY", 18);
+        lockTitle.setTypeface(null, 1);
+        lockTitle.setTextColor(0xFFFF5252);
+        lockTitle.setGravity(Gravity.CENTER);
+        lockCard.addView(lockTitle);
+
+        safetyLockoutText = text("Video playback is restricted while vehicle is in motion or shifted out of PARK.", 14);
+        safetyLockoutText.setTextColor(Color.WHITE);
+        safetyLockoutText.setGravity(Gravity.CENTER);
+        safetyLockoutText.setPadding(0, dp(12), 0, dp(8));
+        lockCard.addView(safetyLockoutText);
+
+        TextView lockHint = text("Shift transmission into PARK and come to a complete stop to resume video.", 13);
+        lockHint.setTextColor(0xFFAAAAAA);
+        lockHint.setGravity(Gravity.CENTER);
+        lockCard.addView(lockHint);
+
+        FrameLayout.LayoutParams lclp = new FrameLayout.LayoutParams(dp(540), -2, Gravity.CENTER);
+        safetyLockoutOverlay.addView(lockCard, lclp);
+        root.addView(safetyLockoutOverlay, new FrameLayout.LayoutParams(-1, -1));
+
+        // Connect Gen5W Vehicle Telemetry Gate
+        vehicleGate = new VehicleVideoGate(this);
+        vehicleGate.setListener(new VehicleVideoGate.OnParkStateChangeListener() {
+            @Override
+            public void onParkStateChanged(boolean isParked, String reason) {
+                handleParkState(isParked, reason);
+            }
+        });
+        if (!vehicleGate.isVehicleParked()) {
+            handleParkState(false, vehicleGate.getLastReason());
+        }
 
         setContentView(root);
         updateAspect();
@@ -907,12 +967,58 @@ public class ExoPlayerActivity extends Activity {
         }
     }
 
+    private void handleParkState(final boolean isParked, final String reason) {
+        if (safetyLockoutOverlay == null) return;
+        if (!isParked) {
+            if (player != null && player.getPlayWhenReady()) {
+                player.setPlayWhenReady(false);
+            }
+            if (safetyLockoutText != null) {
+                safetyLockoutText.setText("Video playback is restricted while vehicle is in motion or shifted out of PARK.\n(" + reason + ")");
+            }
+            safetyLockoutOverlay.setVisibility(View.VISIBLE);
+            showControls(false);
+        } else {
+            safetyLockoutOverlay.setVisibility(View.GONE);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (vehicleGate != null) {
+            vehicleGate.start();
+        }
+        if (Build.VERSION.SDK_INT >= 19) {
+            getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_FULLSCREEN
+                    | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+            );
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (player != null && player.getPlayWhenReady()) {
+            player.setPlayWhenReady(false);
+        }
+        if (vehicleGate != null) {
+            vehicleGate.stop();
+        }
+    }
+
     @Override
     protected void onDestroy() {
         released = true;
         playerPrepared = false;
         pendingMediaSource = null;
         handler.removeCallbacksAndMessages(null);
+        if (vehicleGate != null) {
+            vehicleGate.stop();
+        }
         if (player != null) {
             player.release();
             player = null;
@@ -922,6 +1028,8 @@ public class ExoPlayerActivity extends Activity {
             originalTls = null;
         }
         if (audioManager != null && audioFocusGranted) {
+            // Hand off to process-wide focus holder to retain Nuvio as the active Gen5W AV source
+            AudioFocusHolder.hold(audioManager);
             audioManager.abandonAudioFocus(focusListener);
         }
         super.onDestroy();

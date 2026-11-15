@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.3] - 2026-11-15
+
+### 🚗 Verified Factory Automotive Telemetry & Safety Gate
+- **Real Gen5W Binder Reflection (`VehicleVideoGate.java`)**: Replaced non-functional stub method lookups with verified factory Binder interfaces dynamically loaded from `/system/framework/automotive.jar` and `/system/framework/com.hkmc.ext.hcan.jar`:
+  - **Micom Gear P Status**: `ISystemService.getGearPStatus()` (`1` = Park, `0` = In Gear).
+  - **Regulation Status**: `IRegulationManager.getStatus()` (`0` = Unrestricted).
+  - **CAN Bus Speed & Motion**: `ITM_HSCANService.getCarSpeed(0)` (km/h) and `IsCarMoving()` (Boolean).
+- **Fail-Closed Safety Policy & Debounce**: Implemented 1500ms continuous Park proof debounce to prevent stop-and-go playback stutter, with immediate trip lockout if gear shifts or motion starts.
+- **Player Safety Lockout Overlay**: Integrated high-contrast warning overlay inside `ExoPlayerActivity` that immediately pauses playback and explains the lockout reason when vehicle is in gear or motion.
+- **Diagnostic Dashboard Integration**: Added live vehicle telemetry monitor to the *System Platform* card in Settings.
+
+### 📻 Audio Focus Retention Engine (`AudioFocusHolder.java`)
+- **FM Radio Auto-Restore Elimination**: Implemented a process-scoped audio focus retention holder that prevents the Gen5W `ModeManagerService` and `AudioServiceHelper` from aggressively switching the head unit back to FM radio whenever video playback stops or finishes.
+- **Clean Lifecycle Management**: Focus is handed off smoothly between video player and holder, and cleanly released on application exit.
+
+### 🖼️ Edge-to-Edge Ultrawide Inset Removal
+- **90-Pixel Status Bar Elimination**: Configured `FLAG_FULLSCREEN` combined with `View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY` and `View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN` in `ExoPlayerActivity` to eliminate the OEM 90-pixel top status bar inset on 1920x720 Gen5W displays.
+
+### 📦 NEMESIS Dual-Parser Compatibility
+- **Manifest Updates**: Added `types=application,service` alongside `type=application,service` in `NEMESIS.data` for seamless compatibility across both legacy and modern NEMESIS installer revisions.
+
+---
+
 ## [1.0.2] - 2026-11-15
 
 ### 🚀 Native NEMESIS USB Installer Architecture

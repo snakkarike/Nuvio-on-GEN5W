@@ -15,6 +15,7 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
+import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -43,6 +44,7 @@ import org.json.JSONObject;
 import org.nuvio.gen5w.debrid.TorboxClient;
 import org.nuvio.gen5w.gate.MotionGuard;
 import org.nuvio.gen5w.gate.VehicleVideoGate;
+import org.nuvio.gen5w.player.AudioFocusHolder;
 import org.nuvio.gen5w.player.ExoPlayerActivity;
 import org.nuvio.gen5w.player.VideoTls;
 import org.nuvio.gen5w.ui.FlagText;
@@ -159,6 +161,9 @@ public class MainActivity extends Activity {
 
     // TLS helper for image loading
     private SSLSocketFactory posterTlsFactory;
+
+    // Automotive park & motion gate
+    private VehicleVideoGate vehicleGate;
 
     int dp(int x) {
         return (int) (x * getResources().getDisplayMetrics().density + 0.5f);
@@ -277,6 +282,8 @@ public class MainActivity extends Activity {
         }
 
         immersiveWindow();
+        vehicleGate = new VehicleVideoGate(this);
+        vehicleGate.start();
         showParkedConfirmation();
     }
 
@@ -304,6 +311,29 @@ public class MainActivity extends Activity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) immersiveWindow();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (vehicleGate != null) vehicleGate.start();
+        immersiveWindow();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (vehicleGate != null) vehicleGate.stop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (vehicleGate != null) vehicleGate.stop();
+        AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (am != null) {
+            AudioFocusHolder.release(am);
+        }
+        super.onDestroy();
     }
 
     void showParkedConfirmation() {
@@ -438,7 +468,7 @@ public class MainActivity extends Activity {
         });
         header.addView(brandBox, new LinearLayout.LayoutParams(0, dp(44), 1));
 
-        TextView current = text("v1.0.2 • " + page.toUpperCase(Locale.US), 13);
+        TextView current = text("v1.0.3 • " + page.toUpperCase(Locale.US), 13);
         current.setTextColor(muted);
         header.addView(current);
         root.addView(header);
@@ -4111,14 +4141,16 @@ public class MainActivity extends Activity {
         sTitle.setTextColor(accent);
         sysCard.addView(sTitle);
 
-        String buildInfo = "App: Nuvio Auto v1.0.2 (Native KitKat single-DEX)\n" +
+        String telemetryInfo = (vehicleGate != null) ? vehicleGate.getTelemetryStatus() : "N/A";
+        String buildInfo = "App: Nuvio Auto v1.0.3 (Native KitKat single-DEX)\n" +
                 "Author: Saurabh Nakkarike (@snakkarike)\n" +
                 "OS: Android 4.4.2 KitKat (API 19)\n" +
                 "Architecture: " + android.os.Build.CPU_ABI + "\n" +
                 "Display Resolution: 1920x720 widescreen (10.25\" automotive display)\n" +
                 "Hardware Codec: OMX.TCC.avcdec (Telechips Hardware VPU)\n" +
                 "Codec Patch: ACTIVE (gen5-codec-patch installed)\n" +
-                "Security: Mozilla CA Root Trust + TLS 1.2 Socket Factory";
+                "Security: Mozilla CA Root Trust + TLS 1.2 Socket Factory\n" +
+                "Vehicle Telemetry: " + telemetryInfo;
         TextView sBody = text(buildInfo, 13);
         sBody.setTextColor(muted);
         sBody.setPadding(0, dp(4), 0, 0);
