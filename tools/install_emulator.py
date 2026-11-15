@@ -148,9 +148,65 @@ def show_logs():
     print("=" * 60)
 
 
+def install_vlc():
+    adb = find_adb()
+    if not adb:
+        print("[!] ADB executable not found. Make sure Android SDK platform-tools is installed or emulator is running.", file=sys.stderr)
+        sys.exit(1)
+
+    print("[*] Detecting device CPU architecture...")
+    res = subprocess.run([adb, "shell", "getprop", "ro.product.cpu.abi"], capture_output=True, text=True)
+    abi = res.stdout.strip()
+    if not abi:
+        abi = "x86"
+    print(f"[*] Detected device ABI: {abi}")
+
+    if "arm" in abi:
+        flavor = "armeabi-v7a"
+    else:
+        flavor = "x86"
+
+    apk_name = f"VLC-Android-3.3.4-{flavor}.apk"
+    vlc_url = f"https://get.videolan.org/vlc-android/3.3.4/{apk_name}"
+    cache_dir = os.path.join(ROOT_DIR, "tools", "cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    vlc_apk = os.path.join(cache_dir, apk_name)
+
+    if not os.path.isfile(vlc_apk) or os.path.getsize(vlc_apk) < 10000000:
+        print(f"[*] Downloading KitKat-compatible VLC for Android ({flavor})...")
+        print(f"    From: {vlc_url}")
+        import urllib.request
+        def progress(count, block_size, total_size):
+            pct = min(100, int(count * block_size * 100 / max(1, total_size)))
+            sys.stdout.write(f"\r    Downloading: {pct}% ({count * block_size // (1024*1024)}MB / {total_size // (1024*1024)}MB)")
+            sys.stdout.flush()
+        try:
+            urllib.request.urlretrieve(vlc_url, vlc_apk, reporthook=progress)
+            print("\n[✓] Download complete!")
+        except Exception as e:
+            print(f"\n[!] Failed to download VLC APK: {e}", file=sys.stderr)
+            print(f"    You can manually download: {vlc_url}", file=sys.stderr)
+            print(f"    And save it to: {vlc_apk}", file=sys.stderr)
+            sys.exit(1)
+
+    remote_path = "/data/local/tmp/vlc.apk"
+    print(f"[*] Pushing VLC APK to {remote_path}...")
+    subprocess.run([adb, "push", vlc_apk, remote_path], check=True)
+
+    print("[*] Installing VLC on device (KitKat pm install)...")
+    res = subprocess.run([adb, "shell", "pm", "install", "-r", remote_path], capture_output=True, text=True)
+    print(res.stdout)
+    if "Success" in res.stdout:
+        print("[✓] VLC for Android successfully installed!")
+    else:
+        print(f"[!] Installation response: {res.stdout} {res.stderr}", file=sys.stderr)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] in ("--log", "-l", "log"):
         show_logs()
+    elif len(sys.argv) > 1 and sys.argv[1] in ("vlc", "--vlc", "install-vlc"):
+        install_vlc()
     else:
         target = sys.argv[1] if len(sys.argv) > 1 else find_best_apk()
         install_on_emulator(target)

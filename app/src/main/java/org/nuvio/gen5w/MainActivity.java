@@ -17,6 +17,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.TextUtils;
@@ -437,7 +438,7 @@ public class MainActivity extends Activity {
         });
         header.addView(brandBox, new LinearLayout.LayoutParams(0, dp(44), 1));
 
-        TextView current = text("v1.0.1 • " + page.toUpperCase(Locale.US), 13);
+        TextView current = text("v1.0.2 • " + page.toUpperCase(Locale.US), 13);
         current.setTextColor(muted);
         header.addView(current);
         root.addView(header);
@@ -2265,8 +2266,6 @@ public class MainActivity extends Activity {
         }
 
         rememberTitle();
-        Intent intent = new Intent(this, ExoPlayerActivity.class);
-        intent.putExtra("stream_url", url);
         String displayTitle = selectedName;
         if (displayTitle.isEmpty() || "Untitled".equals(displayTitle)) {
             displayTitle = selectedId;
@@ -2274,6 +2273,23 @@ public class MainActivity extends Activity {
         if (!selectedVideoLabel.isEmpty()) {
             displayTitle = displayTitle + " • " + selectedVideoLabel;
         }
+
+        if (prefs.getBoolean("vlc_integration", false)) {
+            try {
+                Intent vlcIntent = new Intent(Intent.ACTION_VIEW);
+                vlcIntent.setPackage("org.videolan.vlc");
+                vlcIntent.setDataAndType(Uri.parse(url), "video/*");
+                vlcIntent.putExtra("title", displayTitle);
+                vlcIntent.putExtra("from_start", false);
+                startActivity(vlcIntent);
+                return;
+            } catch (Exception e) {
+                Toast.makeText(this, "VLC not found. Falling back to native ExoPlayer.", Toast.LENGTH_SHORT).show();
+            }
+        }
+
+        Intent intent = new Intent(this, ExoPlayerActivity.class);
+        intent.putExtra("stream_url", url);
         intent.putExtra("stream_title", displayTitle);
         intent.putExtra("sync_meta_id", selectedId);
         intent.putExtra("sync_video_id", selectedVideoId.isEmpty() ? selectedId : selectedVideoId);
@@ -2284,10 +2300,30 @@ public class MainActivity extends Activity {
     }
 
     void playDirect(String url, String displayTitle) {
+        if (prefs.getBoolean("vlc_integration", false)) {
+            try {
+                Intent vlcIntent = new Intent(Intent.ACTION_VIEW);
+                vlcIntent.setPackage("org.videolan.vlc");
+                vlcIntent.setDataAndType(Uri.parse(url), "video/*");
+                vlcIntent.putExtra("title", displayTitle);
+                vlcIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(vlcIntent);
+                return;
+            } catch (Exception ignored) {}
+        }
         Intent intent = new Intent(this, ExoPlayerActivity.class);
         intent.putExtra("stream_url", url);
         intent.putExtra("stream_title", displayTitle);
         startActivity(intent);
+    }
+
+    boolean isVlcInstalled() {
+        try {
+            getPackageManager().getPackageInfo("org.videolan.vlc", 0);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     LinearLayout cardLayout() {
@@ -3856,10 +3892,41 @@ public class MainActivity extends Activity {
         vlcSwitch.setChecked(prefs.getBoolean("vlc_integration", false));
         playerCard.addView(switchRow("Enable External VLC Player Option", vlcSwitch));
 
+        final boolean hasVlc = isVlcInstalled();
+        final TextView vlcStatusText = text(hasVlc ?
+                (vlcSwitch.isChecked() ? "✓ VLC is installed. Streams will open in external VLC." : "VLC is installed on device (currently inactive).") :
+                "⚠️ VLC is not installed. Run 'python tools/install_emulator.py vlc' to install.", 13);
+        if (theme != null) {
+            vlcStatusText.setTextColor(hasVlc ? (vlcSwitch.isChecked() ? theme.statusPositive : theme.onSurfaceVariant) : theme.statusWarning);
+        } else {
+            vlcStatusText.setTextColor(hasVlc ? (vlcSwitch.isChecked() ? 0xff4ade80 : muted) : 0xfffbbf24);
+        }
+        vlcStatusText.setPadding(0, dp(2), 0, dp(4));
+        playerCard.addView(vlcStatusText);
+
+        TextView vlcDesc = text("When enabled, selecting a stream or title automatically launches the external VLC app instead of ExoPlayer. Best for HEVC/10-bit video.", 13);
+        vlcDesc.setTextColor(muted);
+        playerCard.addView(vlcDesc);
+
         vlcSwitch.setOnCheckedChangeListener(new M3Switch.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(M3Switch view, boolean isChecked) {
                 prefs.edit().putBoolean("vlc_integration", isChecked).apply();
+                boolean installed = isVlcInstalled();
+                if (isChecked) {
+                    if (installed) {
+                        Toast.makeText(MainActivity.this, "External VLC Player enabled for playback.", Toast.LENGTH_SHORT).show();
+                        vlcStatusText.setText("✓ VLC is installed. Streams will open in external VLC.");
+                        if (theme != null) vlcStatusText.setTextColor(theme.statusPositive);
+                    } else {
+                        Toast.makeText(MainActivity.this, "VLC is not installed! Run: python tools/install_emulator.py vlc", Toast.LENGTH_LONG).show();
+                        vlcStatusText.setText("⚠️ VLC is not installed. Run 'python tools/install_emulator.py vlc' to install.");
+                        if (theme != null) vlcStatusText.setTextColor(theme.statusWarning);
+                    }
+                } else {
+                    vlcStatusText.setText(installed ? "VLC is installed on device (currently inactive)." : "⚠️ VLC is not installed. Run 'python tools/install_emulator.py vlc' to install.");
+                    if (theme != null) vlcStatusText.setTextColor(theme.onSurfaceVariant);
+                }
             }
         });
 
@@ -3917,6 +3984,33 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams lp3 = new LinearLayout.LayoutParams(-2, dp(38));
         lp3.leftMargin = dp(8);
         testRow.addView(testBtn3, lp3);
+
+        Button testBtn4 = btn("▶ Test VLC App", new Runnable() {
+            @Override
+            public void run() {
+                if (isVlcInstalled()) {
+                    try {
+                        Intent vlcIntent = new Intent(Intent.ACTION_VIEW);
+                        vlcIntent.setPackage("org.videolan.vlc");
+                        vlcIntent.setDataAndType(Uri.parse("https://devstreaming-cdn.apple.com/videos/streaming/examples/bipbop_4x3/bipbop_4x3_variant.m3u8"), "video/*");
+                        vlcIntent.putExtra("title", "Apple BipBop (VLC Stream Test)");
+                        vlcIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(vlcIntent);
+                    } catch (Exception e) {
+                        Toast.makeText(MainActivity.this, "Failed to launch VLC: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
+                } else {
+                    Toast.makeText(MainActivity.this, "VLC is not installed! On your PC run: python tools/install_emulator.py vlc", Toast.LENGTH_LONG).show();
+                }
+            }
+        });
+        if (theme == null) {
+            testBtn4.setBackgroundDrawable(shape(surface, 6));
+            testBtn4.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams lp4 = new LinearLayout.LayoutParams(-2, dp(38));
+        lp4.leftMargin = dp(8);
+        testRow.addView(testBtn4, lp4);
 
         playerCard.addView(testRow);
         body.addView(playerCard);
@@ -4017,7 +4111,7 @@ public class MainActivity extends Activity {
         sTitle.setTextColor(accent);
         sysCard.addView(sTitle);
 
-        String buildInfo = "App: Nuvio Auto v1.0.1 (Native KitKat single-DEX)\n" +
+        String buildInfo = "App: Nuvio Auto v1.0.2 (Native KitKat single-DEX)\n" +
                 "Author: Saurabh Nakkarike (@snakkarike)\n" +
                 "OS: Android 4.4.2 KitKat (API 19)\n" +
                 "Architecture: " + android.os.Build.CPU_ABI + "\n" +

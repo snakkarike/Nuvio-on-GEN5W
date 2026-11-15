@@ -7,14 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.2] - Unreleased
+## [1.0.2] - 2026-11-15
 
-### 🌐 Cloud Synchronization & Extended Nuvio APIs (In Progress)
-- **Automatic Token Refresh**: Seamless session renewal using `POST /auth/v1/token?grant_type=refresh_token` to eliminate unexpected session timeouts on vehicle head units.
-- **"My Library" Watchlist Tab**: Native browsing and management of saved movies and series (`GET /rest/v1/library_items`) with direct "+ Library" / "✓ In Library" toggling on detail views.
-- **Continue Watching Dismissal**: Ability to dismiss or delete completed/abandoned titles from the cloud resume carousel (`DELETE /rest/v1/watch_progress`).
-- **Profile Cloud Preferences**: Synchronization of default audio soundtrack and subtitle language preferences across devices (`/rest/v1/profile_settings`).
-- **Bi-Directional Addon Sync**: Pushing locally added addon manifests directly to the user's Nuvio cloud account.
+### 🚀 Native NEMESIS USB Installer Architecture
+- **Standard Native Package Spec (`type=install`)**: Replaced deprecated `type=execute` and fragile custom `NEMESIS.sh` script with native NEMESIS USB installer specification (`path=packages/nuvio.gen5w.zip`).
+- **Vehicle Installation UI Fix**: Resolves blank package dialogs on the Gen5W infotainment screen by allowing the head unit's NEMESIS daemon to parse metadata, dependencies (`media.codecs`, `keyboard.hackers`, `keyboard.activate`), author, and description natively.
+- **Path Resolution Reliability**: Eliminates working-directory relative path lookup failures (exit code 12: `Replacement Nuvio package missing`) during USB installation.
+- **Component Launcher Target**: Corrected component entry in `packaging/NEMESIS.data` to `org.nuvio.gen5w/org.nuvio.gen5w.MainActivity` ensuring proper application launch after install.
+
+### 🎬 External VLC Player Support & Diagnostics
+- **External Player Setting**: Added "Enable External VLC" toggle under *Settings* allowing users to route streams directly to VLC for Android when installed on the head unit.
+- **KitKat CA Certificate Diagnostics**: Added detection and guidance regarding Android 4.4's expired system CA certificate root store (September 2021) in external players, highlighting Nuvio's built-in ExoPlayer which utilizes an embedded Mozilla root store with BoringSSL modern TLS 1.2/1.3.
+
+### 📦 Automated Packaging & CI/CD
+- **Packaging Pipeline (`tools/package.py`)**: Updated USB packaging generator to cleanly create standard `dist/Nuvio-gen5-hmg-nemesis-v1.0.2-USB-Installer.zip` without legacy shell wrappers.
+- **GitHub Actions Workflow (`build.yml`)**: Synchronized CI build pipeline with v1.0.2 release artifacts, automated source archive generation, and release publishing.
 
 ---
 

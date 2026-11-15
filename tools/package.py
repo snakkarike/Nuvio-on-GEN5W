@@ -59,8 +59,8 @@ def sha256_file(filepath):
 
 def get_version_info():
     gradle_path = os.path.join(ROOT_DIR, "app", "build.gradle")
-    version_name = "1.0.1"
-    version_code = 2
+    version_name = "1.0.2"
+    version_code = 3
     if os.path.isfile(gradle_path):
         with open(gradle_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -197,30 +197,18 @@ def package_usb_distribution(version_name, version_code):
     usb_packages_dir = os.path.join(USB_DIR, "packages")
     os.makedirs(usb_packages_dir, exist_ok=True)
 
-    # Generate USB NEMESIS.data
-    usb_data_content = f"[nemesis]\nversion={version_name}\ntype=execute\npath=NEMESIS.sh\n"
+    # Generate USB NEMESIS.data (standard installer manifest for Gen5W)
+    usb_data_template = os.path.join(ROOT_DIR, "packaging", "USB-NEMESIS.data")
+    if os.path.isfile(usb_data_template):
+        with open(usb_data_template, "r", encoding="utf-8") as f:
+            usb_data_content = f.read()
+    else:
+        usb_data_content = "[nemesis]\nversion=1.0\ntype=install\npath=packages/nuvio.gen5w.zip\n"
+
     usb_data_dst = os.path.join(USB_DIR, "NEMESIS.data")
     with open(usb_data_dst, "w", encoding="utf-8") as f:
         f.write(usb_data_content)
     print(f"    + Created {usb_data_dst}")
-
-    # Generate USB NEMESIS.sh
-    nemesis_sh_template = os.path.join(ROOT_DIR, "packaging", "NEMESIS.sh")
-    if os.path.isfile(nemesis_sh_template):
-        with open(nemesis_sh_template, "r", encoding="utf-8") as f:
-            clean_install = f.read()
-    else:
-        clean_install = ""
-
-    clean_install = clean_install.replace("__VERSION_CODE__", str(version_code))
-    usb_sh_dst = os.path.join(USB_DIR, "NEMESIS.sh")
-    with open(usb_sh_dst, "w", encoding="utf-8", newline="\n") as f:
-        f.write(clean_install)
-    try:
-        os.chmod(usb_sh_dst, 0o755)
-    except Exception:
-        pass
-    print(f"    + Created {usb_sh_dst} (mode: 0755)")
 
     # Copy package into USB packages/
     usb_pkg_dst = os.path.join(usb_packages_dir, "nuvio.gen5w.zip")
@@ -235,7 +223,6 @@ def package_usb_distribution(version_name, version_code):
     print(f"[*] Building official USB Installer archive: {official_zip_path}...")
     with zipfile.ZipFile(official_zip_path, "w", zipfile.ZIP_DEFLATED) as z:
         add_bytes_with_permissions(z, usb_data_content.encode("utf-8"), "NEMESIS.data", 0o644)
-        add_bytes_with_permissions(z, clean_install.encode("utf-8"), "NEMESIS.sh", 0o755)
         add_file_with_permissions(z, usb_pkg_dst, "packages/nuvio.gen5w.zip", 0o644)
 
     # Validate USB Installer archive structure
@@ -245,17 +232,13 @@ def package_usb_distribution(version_name, version_code):
             print("[!] Error: Corrupted USB installer zip archive", file=sys.stderr)
             sys.exit(1)
         namelist = set(z.namelist())
-        expected_files = {"NEMESIS.data", "NEMESIS.sh", "packages/nuvio.gen5w.zip"}
+        expected_files = {"NEMESIS.data", "packages/nuvio.gen5w.zip"}
         if namelist != expected_files:
             print(f"[!] Error: USB package contents mismatch. Found: {namelist}, Expected: {expected_files}", file=sys.stderr)
             sys.exit(1)
-        sh_content = z.read("NEMESIS.sh").decode("utf-8")
-        if f"EXPECTED_CODE={version_code}" not in sh_content:
-            print(f"[!] Error: NEMESIS.sh missing expected versionCode {version_code}", file=sys.stderr)
-            sys.exit(1)
         data_content = z.read("NEMESIS.data").decode("utf-8")
-        if "type=execute" not in data_content or "path=NEMESIS.sh" not in data_content:
-            print("[!] Error: NEMESIS.data missing execute path", file=sys.stderr)
+        if "type=install" not in data_content or "path=packages/nuvio.gen5w.zip" not in data_content:
+            print("[!] Error: NEMESIS.data missing install path", file=sys.stderr)
             sys.exit(1)
 
     shutil.copy2(official_zip_path, compat_zip_path)
