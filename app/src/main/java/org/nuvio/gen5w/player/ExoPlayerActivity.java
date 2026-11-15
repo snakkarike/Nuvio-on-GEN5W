@@ -5,6 +5,7 @@ import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.drawable.ClipDrawable;
 import android.graphics.drawable.ColorDrawable;
@@ -30,16 +31,20 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.DefaultRenderersFactory;
 import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.Format;
+import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.Player;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.source.MediaSource;
+import com.google.android.exoplayer2.source.MergingMediaSource;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
+import com.google.android.exoplayer2.source.SingleSampleMediaSource;
 import com.google.android.exoplayer2.source.TrackGroup;
 import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.source.hls.HlsMediaSource;
@@ -48,14 +53,22 @@ import com.google.android.exoplayer2.trackselection.MappingTrackSelector.MappedT
 import com.google.android.exoplayer2.ui.AspectRatioFrameLayout;
 import com.google.android.exoplayer2.ui.PlayerView;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
+import com.google.android.exoplayer2.util.MimeTypes;
 import com.google.android.exoplayer2.util.Util;
 import com.google.android.exoplayer2.video.VideoListener;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import org.nuvio.gen5w.gate.MotionGuard;
 import org.nuvio.gen5w.gate.VehicleVideoGate;
 import org.nuvio.gen5w.sync.PlaybackSync;
+import org.nuvio.gen5w.trakt.TraktClient;
 import org.nuvio.gen5w.ui.ThemeManager;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Locale;
 import javax.net.ssl.HttpsURLConnection;
@@ -77,6 +90,21 @@ public class ExoPlayerActivity extends Activity {
     private long watchedElapsedMs = 0, lastWatchSample = 0;
     private PlaybackSync cloudSync;
     private String streamUrl = "", videoTitle = "";
+    private String syncMetaId = "", syncMediaType = "", syncVideoId = "", syncItemTitle = "";
+    private MediaSource baseMediaSource = null;
+    private DefaultDataSourceFactory dataSourceFactory = null;
+
+    public static class SubtitleItem {
+        public final String label;
+        public final String url;
+        public final String lang;
+        public SubtitleItem(String label, String url, String lang) {
+            this.label = label;
+            this.url = url;
+            this.lang = lang;
+        }
+    }
+    private final ArrayList<SubtitleItem> externalSubtitles = new ArrayList<SubtitleItem>();
     private FrameLayout root;
     private PlayerView video;
     private View brightnessShade;
@@ -368,12 +396,39 @@ public class ExoPlayerActivity extends Activity {
         videoTitle = intent.getStringExtra("stream_title");
         if (videoTitle == null) videoTitle = "Video Playback";
 
+        syncMetaId = intent.getStringExtra("sync_meta_id");
+        if (syncMetaId == null) syncMetaId = "";
+        syncMediaType = intent.getStringExtra("sync_media_type");
+        if (syncMediaType == null) syncMediaType = "";
+        syncVideoId = intent.getStringExtra("sync_video_id");
+        if (syncVideoId == null) syncVideoId = "";
+        syncItemTitle = intent.getStringExtra("sync_item_title");
+        if (syncItemTitle == null) syncItemTitle = "";
+
         cloudSync = new PlaybackSync(this,
-                intent.getStringExtra("sync_meta_id"),
-                intent.getStringExtra("sync_media_type"),
-                intent.getStringExtra("sync_video_id"),
-                intent.getStringExtra("sync_item_title"),
+                syncMetaId,
+                syncMediaType,
+                syncVideoId,
+                syncItemTitle,
                 intent.getStringExtra("sync_poster"));
+
+        String streamSubsStr = intent.getStringExtra("stream_subtitles");
+        if (streamSubsStr != null && !streamSubsStr.isEmpty()) {
+            try {
+                JSONArray arr = new JSONArray(streamSubsStr);
+                for (int i = 0; i < arr.length(); i++) {
+                    JSONObject s = arr.optJSONObject(i);
+                    if (s == null) continue;
+                    String sUrl = s.optString("url", "");
+                    String sLang = s.optString("lang", "en");
+                    String sName = s.optString("name", "");
+                    if (sUrl.startsWith("http")) {
+                        String label = !sName.isEmpty() ? sName : (sLang.toUpperCase(Locale.US) + " Subtitle " + (i + 1));
+                        externalSubtitles.add(new SubtitleItem(label, sUrl, sLang));
+                    }
+                }
+            } catch (Exception ignored) {}
+        }
 
         audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         if (audioManager != null) {
@@ -452,9 +507,18 @@ public class ExoPlayerActivity extends Activity {
             @Override
             public void onClick(View v) {
                 if (player == null) return;
-                userPaused = player.getPlayWhenReady();
-                player.setPlayWhenReady(!player.getPlayWhenReady());
+                boolean wasPlaying = player.getPlayWhenReady();
+                userPaused = wasPlaying;
+                player.setPlayWhenReady(!wasPlaying);
                 pauseButton.setText(player.getPlayWhenReady() ? "Ⅱ" : "▶");
+                if (!syncMetaId.isEmpty()) {
+                    float pct = (lastDuration > 0) ? (float) (lastPosition * 100.0 / lastDuration) : 0f;
+                    if (wasPlaying) {
+                        TraktClient.getInstance(ExoPlayerActivity.this).scrobblePause(syncMetaId, syncMediaType, syncVideoId, syncItemTitle, pct);
+                    } else {
+                        TraktClient.getInstance(ExoPlayerActivity.this).scrobbleStart(syncMetaId, syncMediaType, syncVideoId, syncItemTitle, pct);
+                    }
+                }
             }
         });
         spaced(transportPanel, pauseButton, 76, 76, 16);
@@ -621,9 +685,21 @@ public class ExoPlayerActivity extends Activity {
             renderers.setEnableDecoderFallback(true);
 
             selector = new DefaultTrackSelector(this);
-            selector.setParameters(selector.buildUponParameters()
-                    .setPreferredAudioLanguage("en")
-                    .setPreferredAudioMimeType(null));
+            SharedPreferences p = getSharedPreferences("nuvio_stremio_prefs", Context.MODE_PRIVATE);
+            String prefAudio = p.getString("pref_audio_lang", "auto");
+            String prefSub = p.getString("pref_subtitle_lang", "off");
+
+            DefaultTrackSelector.ParametersBuilder pb = selector.buildUponParameters()
+                    .setPreferredAudioMimeType(null);
+            if (!"auto".equals(prefAudio)) {
+                pb.setPreferredAudioLanguage(prefAudio);
+            }
+            if (!"off".equals(prefSub)) {
+                pb.setPreferredTextLanguage(prefSub);
+            } else {
+                pb.setRendererDisabled(C.TRACK_TYPE_TEXT, true);
+            }
+            selector.setParameters(pb);
 
             player = new SimpleExoPlayer.Builder(this, renderers).setTrackSelector(selector).build();
             player.setAudioAttributes(new AudioAttributes.Builder()
@@ -637,6 +713,10 @@ public class ExoPlayerActivity extends Activity {
                     firstFrame = true;
                     clearStatus();
                     scheduleHide();
+                    if (!syncMetaId.isEmpty()) {
+                        float pct = (lastDuration > 0) ? (float) (lastPosition * 100.0 / lastDuration) : 0f;
+                        TraktClient.getInstance(ExoPlayerActivity.this).scrobbleStart(syncMetaId, syncMediaType, syncVideoId, syncItemTitle, pct);
+                    }
                 }
             });
 
@@ -656,6 +736,9 @@ public class ExoPlayerActivity extends Activity {
                     } else if (state == Player.STATE_ENDED) {
                         showControls(true);
                         status("Playback finished.");
+                        if (!syncMetaId.isEmpty()) {
+                            TraktClient.getInstance(ExoPlayerActivity.this).scrobbleStop(syncMetaId, syncMediaType, syncVideoId, syncItemTitle, 100f);
+                        }
                     }
                 }
 
@@ -730,19 +813,18 @@ public class ExoPlayerActivity extends Activity {
             originalTls = HttpsURLConnection.getDefaultSSLSocketFactory();
             HttpsURLConnection.setDefaultSSLSocketFactory(VideoTls.build(this));
 
-            DefaultDataSourceFactory dataSourceFactory = new DefaultDataSourceFactory(
+            dataSourceFactory = new DefaultDataSourceFactory(
                     this, "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
 
             Uri uri = Uri.parse(streamUrl);
             String path = uri.getPath() == null ? "" : uri.getPath().toLowerCase(Locale.US);
-            MediaSource mediaSource;
             if (path.endsWith(".m3u8")) {
-                mediaSource = new HlsMediaSource.Factory(dataSourceFactory).createMediaSource(uri);
+                baseMediaSource = new HlsMediaSource.Factory(dataSourceFactory).createMediaSource(uri);
             } else {
-                mediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(uri);
+                baseMediaSource = new ProgressiveMediaSource.Factory(dataSourceFactory).createMediaSource(uri);
             }
 
-            prepareWhenSurfaceReady(mediaSource);
+            prepareWhenSurfaceReady(baseMediaSource);
 
         } catch (Throwable t) {
             status("Playback setup failed: " + t.getMessage());
@@ -850,11 +932,13 @@ public class ExoPlayerActivity extends Activity {
         final ArrayList<Integer> renderers = new ArrayList<>();
         final ArrayList<Integer> groups = new ArrayList<>();
         final ArrayList<Integer> tracks = new ArrayList<>();
+        final ArrayList<Integer> extIndexes = new ArrayList<>();
 
         names.add(kind == C.TRACK_TYPE_AUDIO ? "Default / Auto" : "Off");
         renderers.add(-1);
         groups.add(-1);
         tracks.add(-1);
+        extIndexes.add(-1);
 
         for (int r = 0; r < map.getRendererCount(); r++) {
             if (map.getRendererType(r) != kind) continue;
@@ -869,7 +953,19 @@ public class ExoPlayerActivity extends Activity {
                     renderers.add(r);
                     groups.add(g);
                     tracks.add(t);
+                    extIndexes.add(-1);
                 }
+            }
+        }
+
+        if (kind == C.TRACK_TYPE_TEXT) {
+            for (int e = 0; e < externalSubtitles.size(); e++) {
+                SubtitleItem sub = externalSubtitles.get(e);
+                names.add(sub.label + " [Online]");
+                renderers.add(-2);
+                groups.add(-2);
+                tracks.add(-2);
+                extIndexes.add(e);
             }
         }
 
@@ -912,6 +1008,13 @@ public class ExoPlayerActivity extends Activity {
                 public void onClick(View v) {
                     dialog.dismiss();
                     int r = renderers.get(which);
+                    if (r == -2) {
+                        int extIdx = extIndexes.get(which);
+                        if (extIdx >= 0 && extIdx < externalSubtitles.size()) {
+                            loadExternalSubtitle(externalSubtitles.get(extIdx));
+                        }
+                        return;
+                    }
                     DefaultTrackSelector.ParametersBuilder settings = selector.buildUponParameters();
                     if (r == -1) {
                         for (int k = 0; k < map.getRendererCount(); k++) {
@@ -936,6 +1039,27 @@ public class ExoPlayerActivity extends Activity {
         }
         sv.addView(list);
         panel.addView(sv, new LinearLayout.LayoutParams(-1, 0, 1));
+
+        if (kind == C.TRACK_TYPE_TEXT) {
+            Button fetchBtn = new Button(this);
+            fetchBtn.setText("🔍 Search OpenSubtitles");
+            fetchBtn.setTextSize(13);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, fetchBtn, theme.primaryContainer, theme.onPrimaryContainer, 0, 0, true);
+            } else {
+                fetchBtn.setTextColor(Color.WHITE);
+                fetchBtn.setBackgroundDrawable(pill(0xff2a1a3e, ACCENT, 8));
+            }
+            fetchBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    fetchOpenSubtitles(dialog);
+                }
+            });
+            LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(-1, dp(42));
+            flp.setMargins(0, dp(8), 0, 0);
+            panel.addView(fetchBtn, flp);
+        }
 
         Button cancel = new Button(this);
         cancel.setText("Cancel");
@@ -999,11 +1123,118 @@ public class ExoPlayerActivity extends Activity {
         }
     }
 
+    private void loadExternalSubtitle(SubtitleItem sub) {
+        if (player == null || baseMediaSource == null || dataSourceFactory == null) return;
+        try {
+            Uri subUri = Uri.parse(sub.url);
+            String mime = (sub.url.endsWith(".vtt") || sub.url.contains(".vtt")) ? MimeTypes.TEXT_VTT : MimeTypes.APPLICATION_SUBRIP;
+            SingleSampleMediaSource subSource = new SingleSampleMediaSource.Factory(dataSourceFactory)
+                    .createMediaSource(new MediaItem.Subtitle(subUri, mime, sub.lang), C.TIME_UNSET);
+            MergingMediaSource merged = new MergingMediaSource(baseMediaSource, subSource);
+            player.prepare(merged, false, false);
+
+            DefaultTrackSelector.ParametersBuilder settings = selector.buildUponParameters();
+            MappedTrackInfo map = selector.getCurrentMappedTrackInfo();
+            if (map != null) {
+                for (int k = 0; k < map.getRendererCount(); k++) {
+                    if (map.getRendererType(k) == C.TRACK_TYPE_TEXT) {
+                        settings.setRendererDisabled(k, false);
+                    }
+                }
+            }
+            if (sub.lang != null && !sub.lang.isEmpty()) {
+                settings.setPreferredTextLanguage(sub.lang);
+            }
+            selector.setParameters(settings);
+            Toast.makeText(this, "Active Subtitle: " + sub.label, Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "Failed to load subtitle: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void fetchOpenSubtitles(final Dialog parentDialog) {
+        final String subId = !syncVideoId.isEmpty() ? syncVideoId : syncMetaId;
+        if (subId.isEmpty()) {
+            Toast.makeText(this, "No video ID available for OpenSubtitles lookup", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Toast.makeText(this, "Searching OpenSubtitles…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String type = syncMediaType.isEmpty() ? "movie" : syncMediaType;
+                    String url = "https://opensubtitles-v3.strem.io/subtitles/" + type + "/" + subId + ".json";
+                    HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+                    if (conn instanceof HttpsURLConnection) {
+                        ((HttpsURLConnection) conn).setSSLSocketFactory(VideoTls.build(ExoPlayerActivity.this));
+                    }
+                    conn.setConnectTimeout(8000);
+                    conn.setReadTimeout(8000);
+                    conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; Gen5W) Nuvio/1.0.0");
+                    if (conn.getResponseCode() == 200) {
+                        InputStream is = conn.getInputStream();
+                        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                        byte[] buf = new byte[4096];
+                        int r;
+                        while ((r = is.read(buf)) != -1) baos.write(buf, 0, r);
+                        is.close();
+                        JSONObject res = new JSONObject(baos.toString("UTF-8"));
+                        final JSONArray subs = res.optJSONArray("subtitles");
+                        if (subs != null && subs.length() > 0) {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (parentDialog != null && parentDialog.isShowing()) {
+                                        parentDialog.dismiss();
+                                    }
+                                    int added = 0;
+                                    for (int i = 0; i < subs.length(); i++) {
+                                        JSONObject s = subs.optJSONObject(i);
+                                        if (s == null) continue;
+                                        String sUrl = s.optString("url", "");
+                                        String sLang = s.optString("lang", "en");
+                                        String sName = s.optString("name", "");
+                                        if (sUrl.startsWith("http")) {
+                                            String label = !sName.isEmpty() ? sName : (sLang.toUpperCase(Locale.US) + " Subtitle " + (added + 1));
+                                            externalSubtitles.add(new SubtitleItem(label, sUrl, sLang));
+                                            added++;
+                                        }
+                                    }
+                                    Toast.makeText(ExoPlayerActivity.this, "Found " + added + " online subtitle(s)", Toast.LENGTH_SHORT).show();
+                                    chooseTracks(C.TRACK_TYPE_TEXT);
+                                }
+                            });
+                            return;
+                        }
+                    }
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(ExoPlayerActivity.this, "No OpenSubtitles found for this video", Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                } catch (final Exception e) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            Toast.makeText(ExoPlayerActivity.this, "Subtitle search error: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
         if (player != null && player.getPlayWhenReady()) {
             player.setPlayWhenReady(false);
+            if (!syncMetaId.isEmpty()) {
+                float pct = (lastDuration > 0) ? (float) (lastPosition * 100.0 / lastDuration) : 0f;
+                TraktClient.getInstance(this).scrobblePause(syncMetaId, syncMediaType, syncVideoId, syncItemTitle, pct);
+            }
         }
         if (vehicleGate != null) {
             vehicleGate.stop();
@@ -1018,6 +1249,10 @@ public class ExoPlayerActivity extends Activity {
         handler.removeCallbacksAndMessages(null);
         if (vehicleGate != null) {
             vehicleGate.stop();
+        }
+        if (!syncMetaId.isEmpty() && firstFrame) {
+            float pct = (lastDuration > 0) ? (float) (lastPosition * 100.0 / lastDuration) : 0f;
+            TraktClient.getInstance(this).scrobbleStop(syncMetaId, syncMediaType, syncVideoId, syncItemTitle, pct);
         }
         if (player != null) {
             player.release();

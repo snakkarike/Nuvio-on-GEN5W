@@ -85,7 +85,7 @@ public final class PlaybackSync {
         c.setRequestProperty("Content-Type", "application/json");
         c.setRequestProperty("apikey", "sb_publishable_1Clq8rlTVACkdcZuqr6_AD__xUUC_EN");
         c.setRequestProperty("Authorization", "Bearer " + auth);
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.4");
         c.setConnectTimeout(10000);
         c.setReadTimeout(15000);
 
@@ -128,6 +128,29 @@ public final class PlaybackSync {
         os.close();
         int status = c.getResponseCode();
         c.disconnect();
+
+        if (status >= 400) {
+          // Direct table upsert fallback to /rest/v1/watch_progress
+          entry.put("profile_id", profIntId);
+          URL tableTarget = new URL(baseUrl + "/rest/v1/watch_progress");
+          HttpURLConnection tc = (HttpURLConnection) tableTarget.openConnection();
+          if (tc instanceof HttpsURLConnection) {
+            ((HttpsURLConnection) tc).setSSLSocketFactory(VideoTls.build(app));
+          }
+          tc.setRequestMethod("POST");
+          tc.setDoOutput(true);
+          tc.setRequestProperty("Content-Type", "application/json");
+          tc.setRequestProperty("apikey", "sb_publishable_1Clq8rlTVACkdcZuqr6_AD__xUUC_EN");
+          tc.setRequestProperty("Authorization", "Bearer " + auth);
+          tc.setRequestProperty("Prefer", "resolution=merge-duplicates");
+          tc.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.4");
+          OutputStream tos = tc.getOutputStream();
+          tos.write(entry.toString().getBytes("UTF-8"));
+          tos.flush();
+          tos.close();
+          tc.getResponseCode();
+          tc.disconnect();
+        }
         return;
       } catch (Exception ignored) {}
     }

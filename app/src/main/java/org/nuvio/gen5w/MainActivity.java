@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -11,14 +12,17 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffXfermode;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.GradientDrawable;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.TextUtils;
@@ -41,12 +45,14 @@ import android.widget.Toast;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.nuvio.gen5w.api.NuvioClient;
 import org.nuvio.gen5w.debrid.TorboxClient;
 import org.nuvio.gen5w.gate.MotionGuard;
 import org.nuvio.gen5w.gate.VehicleVideoGate;
 import org.nuvio.gen5w.player.AudioFocusHolder;
 import org.nuvio.gen5w.player.ExoPlayerActivity;
 import org.nuvio.gen5w.player.VideoTls;
+import org.nuvio.gen5w.trakt.TraktClient;
 import org.nuvio.gen5w.ui.FlagText;
 import org.nuvio.gen5w.ui.M3Switch;
 import org.nuvio.gen5w.ui.ThemeManager;
@@ -106,6 +112,51 @@ public class MainActivity extends Activity {
     private static final long ADDONS_AGE = 20 * 60 * 1000L;
 
     int bg = 0xFF141218, accent = 0xFFD0BCFF, surface = 0xFF24212B, muted = 0xFFCAC4D0;
+    public static class RoundedImageView extends ImageView {
+        private final Path clipPath = new Path();
+        private final RectF rect = new RectF();
+        private float cornerRadius = 0;
+
+        public RoundedImageView(Context context) {
+            super(context);
+            if (Build.VERSION.SDK_INT < 21) {
+                setLayerType(View.LAYER_TYPE_SOFTWARE, null);
+            }
+        }
+
+        public void setCornerRadius(float radiusPx) {
+            this.cornerRadius = radiusPx;
+            updatePath();
+            invalidate();
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+            super.onSizeChanged(w, h, oldw, oldh);
+            updatePath();
+        }
+
+        private void updatePath() {
+            if (getWidth() > 0 && getHeight() > 0 && cornerRadius > 0) {
+                clipPath.reset();
+                rect.set(0, 0, getWidth(), getHeight());
+                clipPath.addRoundRect(rect, cornerRadius, cornerRadius, Path.Direction.CW);
+            }
+        }
+
+        @Override
+        public void draw(Canvas canvas) {
+            if (cornerRadius > 0 && !clipPath.isEmpty()) {
+                int save = canvas.save();
+                canvas.clipPath(clipPath);
+                super.draw(canvas);
+                canvas.restoreToCount(save);
+            } else {
+                super.draw(canvas);
+            }
+        }
+    }
+
     ThemeManager.Palette theme;
 
     void loadActiveTheme() {
@@ -248,11 +299,17 @@ public class MainActivity extends Activity {
         super.onCreate(savedInstanceState);
         loadActiveTheme();
         prefs = getSharedPreferences("nuvio_stremio_prefs", MODE_PRIVATE);
+        sourceFilter = prefs.getString("pref_stream_quality", "All");
         parkedConfirmed = prefs.getBoolean("disable_popup", false) && prefs.getBoolean("welcome_seen", false);
         auth = prefs.getString("auth", "");
         verifiedAccountEmail = prefs.getString("nuvio_email", prefs.getString("verified_account_email", ""));
         refreshAvatarCatalog();
         if (!auth.isEmpty()) {
+            if (NuvioClient.getInstance(this).isLoggedIn()) {
+                NuvioClient.getInstance(this).refreshSession(null);
+                NuvioClient.getInstance(this).fetchLibraryItems(null);
+                fetchCloudProfileSettings(prefs.getString("nuvio_active_profile_id", ""));
+            }
             fetchNuvioProfiles();
             fetchNuvioAddons();
             fetchNuvioWatchProgress();
@@ -468,7 +525,7 @@ public class MainActivity extends Activity {
         });
         header.addView(brandBox, new LinearLayout.LayoutParams(0, dp(44), 1));
 
-        TextView current = text("v1.0.3 • " + page.toUpperCase(Locale.US), 13);
+        TextView current = text("v1.0.4 • " + page.toUpperCase(Locale.US), 13);
         current.setTextColor(muted);
         header.addView(current);
         root.addView(header);
@@ -522,8 +579,8 @@ public class MainActivity extends Activity {
             nav.setOrientation(LinearLayout.HORIZONTAL);
             nav.setPadding(dp(8), dp(2), dp(8), dp(6));
 
-            String[] labels = {"Movies", "TV Series", "Search", "Add-ons", "Debrid", "Account", "Info", "Settings"};
-            final String[] targets = {"Movies", "TV Series", "Search", "Add-ons", "Debrid", "Account", "Info", "Settings"};
+            String[] labels = {"Movies", "TV Series", "Library", "Search", "Add-ons", "Debrid", "Account", "Info", "Settings"};
+            final String[] targets = {"Movies", "TV Series", "Library", "Search", "Add-ons", "Debrid", "Account", "Info", "Settings"};
 
             for (int i = 0; i < labels.length; i++) {
                 final String target = targets[i];
@@ -560,6 +617,7 @@ public class MainActivity extends Activity {
 
         if ("Home".equals(page) || "Movies".equals(page)) moviesView();
         else if ("TV Series".equals(page)) seriesView();
+        else if ("Library".equals(page)) libraryView();
         else if ("Add-ons".equals(page)) showAddons();
         else if ("Search".equals(page)) searchView();
         else if ("Debrid".equals(page)) debridView();
@@ -713,7 +771,8 @@ public class MainActivity extends Activity {
                     card.setBackgroundDrawable(shape(surface, 12));
                 }
 
-                ImageView cover = new ImageView(this);
+                RoundedImageView cover = new RoundedImageView(this);
+                cover.setCornerRadius(dp(8));
                 cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
                 if (theme != null) {
                     ThemeManager.styleSurfaceCard(this, cover, theme.surfaceContainerHighest, 8, 0, 0);
@@ -837,8 +896,27 @@ public class MainActivity extends Activity {
                 View.OnClickListener openListener = new View.OnClickListener() {
                     @Override public void onClick(View v) { open.run(); }
                 };
+                View.OnLongClickListener dismissListener = new View.OnLongClickListener() {
+                    @Override
+                    public boolean onLongClick(View v) {
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("Remove from Continue Watching?")
+                                .setMessage("Remove \"" + fName[0] + "\" from your watch progress?")
+                                .setPositiveButton("Remove", new DialogInterface.OnClickListener() {
+                                    @Override
+                                    public void onClick(DialogInterface d, int which) {
+                                        dismissContinueWatching(id);
+                                    }
+                                })
+                                .setNegativeButton("Cancel", null)
+                                .show();
+                        return true;
+                    }
+                };
                 card.setOnClickListener(openListener);
                 tile.setOnClickListener(openListener);
+                card.setOnLongClickListener(dismissListener);
+                tile.setOnLongClickListener(dismissListener);
 
                 LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(dp(142), -2);
                 cardLp.setMargins(0, dp(4), dp(10), dp(8));
@@ -848,6 +926,229 @@ public class MainActivity extends Activity {
             section.addView(scroll);
             add(section);
         } catch (Exception ignored) {}
+    }
+
+    void showUpcoming(final String filterType) {
+        if ("series".equals(filterType)) {
+            showUpcomingSeries();
+        } else {
+            showUpcomingMovies();
+        }
+    }
+
+    void showUpcomingSeries() {
+        final String data = prefs.getString("nuvio_continue_watching", "");
+        final ArrayList<JSONObject> seriesInProgress = new ArrayList<JSONObject>();
+        if (!data.isEmpty()) {
+            try {
+                JSONArray all = new JSONArray(data);
+                HashSet<String> seen = new HashSet<String>();
+                for (int i = 0; i < all.length(); i++) {
+                    JSONObject item = all.optJSONObject(i);
+                    if (item == null) continue;
+                    String id = item.optString("id", "");
+                    if (id.isEmpty() || seen.contains(id)) continue;
+                    if (!"series".equals(item.optString("type", ""))) continue;
+                    seen.add(id);
+                    seriesInProgress.add(item);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (!seriesInProgress.isEmpty()) {
+            final LinearLayout section = new LinearLayout(this);
+            section.setOrientation(LinearLayout.VERTICAL);
+            section.setPadding(0, dp(4), 0, dp(12));
+
+            final TextView heading = text("🗓️ Next Up & Upcoming Episodes", 17);
+            heading.setTypeface(null, 1);
+            heading.setTextColor(accent);
+            section.addView(heading);
+
+            final HorizontalScrollView scroll = new HorizontalScrollView(this);
+            scroll.setHorizontalScrollBarEnabled(false);
+            final LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            scroll.addView(row);
+            section.addView(scroll);
+            add(section);
+
+            apiWorkers.execute(new Runnable() {
+                @Override
+                public void run() {
+                    for (final JSONObject sItem : seriesInProgress) {
+                        final String id = sItem.optString("id", "");
+                        final String name = sItem.optString("name", id);
+                        final String poster = sItem.optString("poster", "");
+                        String vId = sItem.optString("videoId", "");
+                        int curSeason = sItem.optInt("season", -1);
+                        int curEpisode = sItem.optInt("episode", -1);
+
+                        if ((curSeason <= 0 || curEpisode <= 0) && vId.contains(":")) {
+                            String[] p = vId.split(":");
+                            if (p.length >= 3) {
+                                try {
+                                    if (curSeason <= 0) curSeason = Integer.parseInt(p[1]);
+                                    if (curEpisode <= 0) curEpisode = Integer.parseInt(p[2]);
+                                } catch (Exception ignored) {}
+                            }
+                        }
+
+                        if (curSeason <= 0) curSeason = 1;
+                        if (curEpisode <= 0) curEpisode = 1;
+
+                        try {
+                            JSONObject metaResp = get(CINEMETA + "meta/series/" + enc(id) + ".json");
+                            JSONObject meta = metaResp != null ? metaResp.optJSONObject("meta") : null;
+                            if (meta == null) continue;
+                            JSONArray videos = meta.optJSONArray("videos");
+                            if (videos == null || videos.length() == 0) continue;
+
+                            JSONObject nextVid = null;
+                            int targetS = curSeason;
+                            int targetE = curEpisode + 1;
+
+                            // 1. Next episode in same season
+                            for (int v = 0; v < videos.length(); v++) {
+                                JSONObject cand = videos.optJSONObject(v);
+                                if (cand == null) continue;
+                                int s = cand.optInt("season", -1);
+                                int e = cand.optInt("number", cand.optInt("episode", -1));
+                                if (s == targetS && e == targetE) {
+                                    nextVid = cand;
+                                    break;
+                                }
+                            }
+
+                            // 2. Or Season (S+1) Episode 1
+                            if (nextVid == null) {
+                                for (int v = 0; v < videos.length(); v++) {
+                                    JSONObject cand = videos.optJSONObject(v);
+                                    if (cand == null) continue;
+                                    int s = cand.optInt("season", -1);
+                                    int e = cand.optInt("number", cand.optInt("episode", -1));
+                                    if (s == curSeason + 1 && (e == 1 || e == 0)) {
+                                        nextVid = cand;
+                                        targetS = curSeason + 1;
+                                        targetE = e;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (nextVid != null) {
+                                final String nextId = nextVid.optString("id", id + ":" + targetS + ":" + targetE);
+                                final String epName = nextVid.optString("title", nextVid.optString("name", "Episode " + targetE));
+                                final String thumb = nextVid.optString("thumbnail", poster);
+                                final String released = nextVid.optString("released", "");
+                                final int finalS = targetS;
+                                final int finalE = targetE;
+
+                                boolean isUpcoming = false;
+                                if (!released.isEmpty()) {
+                                    try {
+                                        isUpcoming = released.compareTo(new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new java.util.Date())) > 0;
+                                    } catch (Exception ignored) {}
+                                }
+                                final boolean upcoming = isUpcoming;
+
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        final LinearLayout card = new LinearLayout(MainActivity.this);
+                                        card.setOrientation(LinearLayout.VERTICAL);
+                                        card.setPadding(dp(6), dp(6), dp(6), dp(8));
+                                        card.setClickable(true);
+                                        card.setFocusable(true);
+                                        if (theme != null) {
+                                            ThemeManager.styleInteractiveCard(MainActivity.this, card, theme.surfaceContainer, theme.onSurface, 12, 1, theme.outlineVariant);
+                                        } else {
+                                            card.setBackgroundDrawable(shape(surface, 12));
+                                        }
+
+                                        RoundedImageView cover = new RoundedImageView(MainActivity.this);
+                                        cover.setCornerRadius(dp(8));
+                                        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                                        if (theme != null) {
+                                            ThemeManager.styleSurfaceCard(MainActivity.this, cover, theme.surfaceContainerHighest, 8, 0, 0);
+                                        } else {
+                                            cover.setBackgroundDrawable(shape(0xff232b38, 8));
+                                        }
+
+                                        FrameLayout tile = new FrameLayout(MainActivity.this);
+                                        tile.addView(cover, new FrameLayout.LayoutParams(-1, -1));
+
+                                        TextView badge = badge(upcoming ? "🗓️ UPCOMING" : "▶ NEXT UP",
+                                                upcoming ? (theme != null ? theme.secondaryContainer : 0xff1e3a5f) : (theme != null ? theme.primaryContainer : 0xff2a1a3e),
+                                                upcoming ? (theme != null ? theme.onSecondaryContainer : 0xff60a5fa) : (theme != null ? theme.onPrimaryContainer : accent),
+                                                0);
+                                        badge.setTextSize(10);
+                                        badge.setPadding(dp(8), dp(3), dp(8), dp(3));
+                                        FrameLayout.LayoutParams blp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.LEFT);
+                                        blp.setMargins(dp(6), dp(6), 0, 0);
+                                        tile.addView(badge, blp);
+
+                                        card.addView(tile, new LinearLayout.LayoutParams(dp(130), dp(175)));
+
+                                        if (thumb.startsWith("http")) {
+                                            loadPoster(cover, thumb);
+                                        } else if (poster.startsWith("http")) {
+                                            loadPoster(cover, poster);
+                                        }
+
+                                        LinearLayout info = new LinearLayout(MainActivity.this);
+                                        info.setOrientation(LinearLayout.VERTICAL);
+                                        info.setPadding(dp(2), dp(6), dp(2), dp(2));
+
+                                        TextView tView = text(name, 12);
+                                        tView.setTypeface(null, 1);
+                                        tView.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+                                        tView.setMaxLines(1);
+                                        tView.setEllipsize(TextUtils.TruncateAt.END);
+                                        info.addView(tView);
+
+                                        String subText = "S" + finalS + " E" + finalE + " • " + epName;
+                                        TextView subView = text(subText, 11);
+                                        subView.setTextColor(theme != null ? theme.primary : accent);
+                                        subView.setSingleLine(true);
+                                        subView.setEllipsize(TextUtils.TruncateAt.END);
+                                        info.addView(subView);
+
+                                        card.addView(info);
+
+                                        View.OnClickListener clicker = new View.OnClickListener() {
+                                            @Override
+                                            public void onClick(View v) {
+                                                selectedId = id;
+                                                selectedType = "series";
+                                                selectedName = name;
+                                                selectedPoster = poster;
+                                                selectedVideoId = nextId;
+                                                selectedVideoLabel = "Season " + finalS + ", Episode " + finalE + " • " + epName;
+                                                rememberTitle();
+                                                render("Streams", true);
+                                            }
+                                        };
+                                        card.setOnClickListener(clicker);
+                                        tile.setOnClickListener(clicker);
+
+                                        LinearLayout.LayoutParams cardLp = new LinearLayout.LayoutParams(dp(142), -2);
+                                        cardLp.setMargins(0, dp(4), dp(10), dp(8));
+                                        row.addView(card, cardLp);
+                                    }
+                                });
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                }
+            });
+        }
+
+        showCatalog("🗓️ Upcoming TV Series", CINEMETA + "catalog/series/top/year=2026.json", "series");
+    }
+
+    void showUpcomingMovies() {
+        showCatalog("🗓️ Upcoming Movies", CINEMETA + "catalog/movie/top/year=2026.json", "movie");
     }
 
     void showAddonCatalogs(String type) {
@@ -903,6 +1204,7 @@ public class MainActivity extends Activity {
         if (isLoggedIn()) {
             showContinueWatching("movie");
         }
+        showUpcoming("movie");
 
         showCatalog("Popular Movies", CINEMETA + "catalog/movie/top.json", "movie");
         showCatalog("Action Movies", CINEMETA + "catalog/movie/top/genre=Action.json", "movie");
@@ -936,6 +1238,7 @@ public class MainActivity extends Activity {
         if (isLoggedIn()) {
             showContinueWatching("series");
         }
+        showUpcoming("series");
 
         showCatalog("Popular TV Series", CINEMETA + "catalog/series/top.json", "series");
         showCatalog("Drama Series", CINEMETA + "catalog/series/top/genre=Drama.json", "series");
@@ -1031,7 +1334,8 @@ public class MainActivity extends Activity {
             card.setBackgroundDrawable(shape(surface, 12));
         }
 
-        ImageView cover = new ImageView(this);
+        RoundedImageView cover = new RoundedImageView(this);
+        cover.setCornerRadius(dp(8));
         cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
         if (theme != null) {
             ThemeManager.styleSurfaceCard(this, cover, theme.surfaceContainerHighest, 8, 0, 0);
@@ -1392,7 +1696,8 @@ public class MainActivity extends Activity {
         infoLp.setMargins(0, 0, 0, dp(10));
         infoCard.setLayoutParams(infoLp);
 
-        final ImageView posterIv = new ImageView(this);
+        final RoundedImageView posterIv = new RoundedImageView(this);
+        posterIv.setCornerRadius(dp(10));
         posterIv.setScaleType(ImageView.ScaleType.CENTER_CROP);
         ThemeManager.styleSurfaceCard(this, posterIv, theme.surfaceContainerHighest, 10, 1, theme.outlineVariant);
         infoCard.addView(posterIv, new LinearLayout.LayoutParams(dp(75), dp(110)));
@@ -1420,6 +1725,26 @@ public class MainActivity extends Activity {
         descView.setMaxLines(3);
         descView.setEllipsize(TextUtils.TruncateAt.END);
         details.addView(descView);
+
+        final Button libBtn = btn(NuvioClient.getInstance(this).isInLibrary(selectedId) ? "✓ In Library" : "＋ Add to Library", null);
+        libBtn.setTextSize(12);
+        boolean inLib = NuvioClient.getInstance(this).isInLibrary(selectedId);
+        if (theme != null) {
+            if (inLib) {
+                ThemeManager.stylePillButton(this, libBtn, theme.primary, theme.onPrimary, 0, 0, true);
+            } else {
+                ThemeManager.stylePillButton(this, libBtn, theme.surfaceContainerHighest, theme.onSurface, 1, theme.outlineVariant, true);
+            }
+        }
+        libBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                toggleLibraryItem(selectedId, selectedType, selectedName, selectedPoster, libBtn);
+            }
+        });
+        LinearLayout.LayoutParams lbp = new LinearLayout.LayoutParams(-2, dp(34));
+        lbp.setMargins(0, dp(6), 0, 0);
+        details.addView(libBtn, lbp);
 
         if (!selectedVideoLabel.isEmpty()) {
             LinearLayout epRow = new LinearLayout(this);
@@ -1715,6 +2040,26 @@ public class MainActivity extends Activity {
                                 descView.setEllipsize(TextUtils.TruncateAt.END);
                                 details.addView(descView);
                             }
+
+                            final Button libBtn = btn(NuvioClient.getInstance(MainActivity.this).isInLibrary(selectedId) ? "✓ In Library" : "＋ Add to Library", null);
+                            libBtn.setTextSize(12);
+                            boolean inLib = NuvioClient.getInstance(MainActivity.this).isInLibrary(selectedId);
+                            if (theme != null) {
+                                if (inLib) {
+                                    ThemeManager.stylePillButton(MainActivity.this, libBtn, theme.primary, theme.onPrimary, 0, 0, true);
+                                } else {
+                                    ThemeManager.stylePillButton(MainActivity.this, libBtn, theme.surfaceContainerHighest, theme.onSurface, 1, theme.outlineVariant, true);
+                                }
+                            }
+                            libBtn.setOnClickListener(new View.OnClickListener() {
+                                @Override
+                                public void onClick(View v) {
+                                    toggleLibraryItem(selectedId, selectedType, selectedName, selectedPoster, libBtn);
+                                }
+                            });
+                            LinearLayout.LayoutParams lbp = new LinearLayout.LayoutParams(-2, dp(34));
+                            lbp.setMargins(0, dp(6), 0, 0);
+                            details.addView(libBtn, lbp);
 
                             infoCard.addView(details, new LinearLayout.LayoutParams(0, -2, 1));
                             add(infoCard);
@@ -2234,9 +2579,10 @@ public class MainActivity extends Activity {
         final String directUrl = stream.optString("url", "");
         final String infoHash = stream.optString("infoHash", "");
         final int fileIdx = stream.optInt("fileIdx", 0);
+        final JSONArray subs = stream.optJSONArray("subtitles");
 
         if (!directUrl.isEmpty()) {
-            openInAppPlayer(directUrl);
+            openInAppPlayer(directUrl, subs);
             return;
         }
 
@@ -2269,7 +2615,7 @@ public class MainActivity extends Activity {
                             @Override
                             public void run() {
                                 progress.dismiss();
-                                openInAppPlayer(resolved);
+                                openInAppPlayer(resolved, subs);
                             }
                         });
                     } catch (final Exception e) {
@@ -2290,6 +2636,10 @@ public class MainActivity extends Activity {
     }
 
     void openInAppPlayer(String url) {
+        openInAppPlayer(url, null);
+    }
+
+    void openInAppPlayer(String url, JSONArray subtitles) {
         if (!parkedConfirmed) {
             showParkedConfirmation();
             return;
@@ -2326,6 +2676,9 @@ public class MainActivity extends Activity {
         intent.putExtra("sync_media_type", selectedType);
         intent.putExtra("sync_item_title", (selectedName.isEmpty() || "Untitled".equals(selectedName)) ? selectedId : selectedName);
         intent.putExtra("sync_poster", selectedPoster);
+        if (subtitles != null && subtitles.length() > 0) {
+            intent.putExtra("stream_subtitles", subtitles.toString());
+        }
         startActivity(intent);
     }
 
@@ -2608,7 +2961,55 @@ public class MainActivity extends Activity {
         Toast.makeText(this, "Switched to Nuvio profile: " + profileName, Toast.LENGTH_SHORT).show();
         fetchNuvioAddons();
         fetchNuvioWatchProgress();
+        fetchCloudProfileSettings(profileId);
         render("Account", false);
+    }
+
+    void fetchCloudProfileSettings(String profileId) {
+        if (!NuvioClient.getInstance(this).isLoggedIn() || profileId == null || profileId.isEmpty()) return;
+        NuvioClient.getInstance(this).fetchProfileSettings(profileId, new NuvioClient.Callback<JSONObject>() {
+            @Override
+            public void onSuccess(JSONObject settings) {
+                if (settings == null) return;
+                String audio = settings.optString("preferred_audio_language", "");
+                String sub = settings.optString("preferred_subtitle_language", "");
+                String quality = settings.optString("streaming_quality", "");
+                SharedPreferences.Editor ed = prefs.edit();
+                if (!audio.isEmpty()) ed.putString("pref_audio_lang", audio);
+                if (!sub.isEmpty()) ed.putString("pref_subtitle_lang", sub);
+                if (!quality.isEmpty()) {
+                    ed.putString("pref_stream_quality", quality);
+                    sourceFilter = quality;
+                }
+                ed.apply();
+            }
+            @Override
+            public void onError(String error, int code) {}
+        });
+    }
+
+    void syncCloudProfileSettings() {
+        if (!NuvioClient.getInstance(this).isLoggedIn()) return;
+        String profId = prefs.getString("nuvio_active_profile_id", "");
+        if (profId.isEmpty()) return;
+
+        try {
+            JSONObject s = new JSONObject();
+            s.put("preferred_audio_language", prefs.getString("pref_audio_lang", "auto"));
+            s.put("preferred_subtitle_language", prefs.getString("pref_subtitle_lang", "off"));
+            s.put("streaming_quality", prefs.getString("pref_stream_quality", "All"));
+            s.put("trakt_scrobbling", TraktClient.getInstance(this).isConnected());
+            NuvioClient.getInstance(this).updateProfileSettings(profId, s, new NuvioClient.Callback<Boolean>() {
+                @Override
+                public void onSuccess(Boolean result) {
+                    Log.d("NuvioSettings", "Profile settings synced to cloud");
+                }
+                @Override
+                public void onError(String error, int code) {
+                    Log.w("NuvioSettings", "Profile settings sync error: " + error);
+                }
+            });
+        } catch (Exception ignored) {}
     }
 
     void nuvioLogin(final String email, final String password) {
@@ -3525,6 +3926,13 @@ public class MainActivity extends Activity {
                             entry.put("manifest", manifest);
                             addons.put(entry);
                             saveAddonCache();
+                            if (NuvioClient.getInstance(MainActivity.this).isLoggedIn()) {
+                                NuvioClient.getInstance(MainActivity.this).pushCloudAddon(
+                                        manifestUrl,
+                                        manifest.optString("name", "Custom Addon"),
+                                        null
+                                );
+                            }
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
@@ -3619,6 +4027,7 @@ public class MainActivity extends Activity {
             info.addView(tr);
             card.addView(info, new LinearLayout.LayoutParams(0, -2, 1));
 
+            final String targetUrl = transport;
             Button remove = btn("Remove", new Runnable() {
                 @Override
                 public void run() {
@@ -3628,6 +4037,9 @@ public class MainActivity extends Activity {
                     }
                     addons = next;
                     saveAddonCache();
+                    if (NuvioClient.getInstance(MainActivity.this).isLoggedIn()) {
+                        NuvioClient.getInstance(MainActivity.this).deleteCloudAddon(targetUrl, null);
+                    }
                     render("Add-ons", false);
                 }
             });
@@ -4045,7 +4457,122 @@ public class MainActivity extends Activity {
         playerCard.addView(testRow);
         body.addView(playerCard);
 
-        // 5. Storage & Clear Cache Card
+        // 5. Cloud Profile Playback Preferences Card
+        LinearLayout prefCard = cardLayout();
+        TextView prefTitle = text("Cloud Profile Preferences", 17);
+        prefTitle.setTypeface(null, 1);
+        prefTitle.setTextColor(accent);
+        prefCard.addView(prefTitle);
+
+        TextView prefDesc = text("Set default audio language, subtitle preferences, and streaming quality for this Nuvio profile.", 13);
+        prefDesc.setTextColor(muted);
+        prefDesc.setPadding(0, dp(4), 0, dp(10));
+        prefCard.addView(prefDesc);
+
+        // Audio Language Row
+        TextView audioLbl = text("Preferred Audio Language", 14);
+        audioLbl.setTypeface(null, 1);
+        prefCard.addView(audioLbl);
+
+        final String[] audioLangs = {"Default / Auto", "English", "Spanish", "French", "German", "Italian", "Japanese", "Korean", "Hindi"};
+        final String[] audioCodes = {"auto", "en", "es", "fr", "de", "it", "ja", "ko", "hi"};
+        final String curAudio = prefs.getString("pref_audio_lang", "auto");
+
+        LinearLayout audioRow = new LinearLayout(this);
+        audioRow.setOrientation(LinearLayout.HORIZONTAL);
+        HorizontalScrollView audioScroll = new HorizontalScrollView(this);
+        audioScroll.setHorizontalScrollBarEnabled(false);
+        audioScroll.addView(audioRow);
+
+        for (int i = 0; i < audioLangs.length; i++) {
+            final String code = audioCodes[i];
+            final String name = audioLangs[i];
+            final boolean isCur = curAudio.equals(code);
+            Button aBtn = btn(name, new Runnable() {
+                @Override
+                public void run() {
+                    prefs.edit().putString("pref_audio_lang", code).apply();
+                    syncCloudProfileSettings();
+                    render("Settings", false);
+                    Toast.makeText(MainActivity.this, "Preferred audio: " + name, Toast.LENGTH_SHORT).show();
+                }
+            });
+            ThemeManager.styleFilterChip(this, aBtn, theme, name, isCur);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(36));
+            lp.setMargins(0, 0, dp(8), 0);
+            audioRow.addView(aBtn, lp);
+        }
+        prefCard.addView(audioScroll);
+
+        // Subtitle Language Row
+        TextView subLbl = text("Preferred Subtitle Language", 14);
+        subLbl.setTypeface(null, 1);
+        subLbl.setPadding(0, dp(12), 0, 0);
+        prefCard.addView(subLbl);
+
+        final String[] subLangs = {"Off", "English", "Spanish", "French", "German", "Italian", "Japanese", "Korean", "Hindi"};
+        final String[] subCodes = {"off", "en", "es", "fr", "de", "it", "ja", "ko", "hi"};
+        final String curSub = prefs.getString("pref_subtitle_lang", "off");
+
+        LinearLayout subRow = new LinearLayout(this);
+        subRow.setOrientation(LinearLayout.HORIZONTAL);
+        HorizontalScrollView subScroll = new HorizontalScrollView(this);
+        subScroll.setHorizontalScrollBarEnabled(false);
+        subScroll.addView(subRow);
+
+        for (int i = 0; i < subLangs.length; i++) {
+            final String code = subCodes[i];
+            final String name = subLangs[i];
+            final boolean isCur = curSub.equals(code);
+            Button sBtn = btn(name, new Runnable() {
+                @Override
+                public void run() {
+                    prefs.edit().putString("pref_subtitle_lang", code).apply();
+                    syncCloudProfileSettings();
+                    render("Settings", false);
+                    Toast.makeText(MainActivity.this, "Preferred subtitles: " + name, Toast.LENGTH_SHORT).show();
+                }
+            });
+            ThemeManager.styleFilterChip(this, sBtn, theme, name, isCur);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, dp(36));
+            lp.setMargins(0, 0, dp(8), 0);
+            subRow.addView(sBtn, lp);
+        }
+        prefCard.addView(subScroll);
+
+        // Quality Filter Row
+        TextView qLbl = text("Default Stream Quality Filter", 14);
+        qLbl.setTypeface(null, 1);
+        qLbl.setPadding(0, dp(12), 0, 0);
+        prefCard.addView(qLbl);
+
+        final String[] qualities = {"All", "H.264 (HW)", "720p", "480p", "1080p"};
+        final String curQ = prefs.getString("pref_stream_quality", "All");
+
+        LinearLayout qRow = new LinearLayout(this);
+        qRow.setOrientation(LinearLayout.HORIZONTAL);
+        for (final String q : qualities) {
+            final boolean isCur = curQ.equals(q);
+            Button qBtn = btn(q, new Runnable() {
+                @Override
+                public void run() {
+                    prefs.edit().putString("pref_stream_quality", q).apply();
+                    sourceFilter = q;
+                    syncCloudProfileSettings();
+                    render("Settings", false);
+                    Toast.makeText(MainActivity.this, "Quality filter: " + q, Toast.LENGTH_SHORT).show();
+                }
+            });
+            ThemeManager.styleFilterChip(this, qBtn, theme, q, isCur);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(36), 1);
+            lp.setMargins(dp(2), 0, dp(2), 0);
+            qRow.addView(qBtn, lp);
+        }
+        prefCard.addView(qRow);
+
+        body.addView(prefCard);
+
+        // 6. Storage & Clear Cache Card
         LinearLayout storageCard = cardLayout();
         TextView stTitle = text("Storage & Cache", 17);
         stTitle.setTypeface(null, 1);
@@ -4142,7 +4669,7 @@ public class MainActivity extends Activity {
         sysCard.addView(sTitle);
 
         String telemetryInfo = (vehicleGate != null) ? vehicleGate.getTelemetryStatus() : "N/A";
-        String buildInfo = "App: Nuvio Auto v1.0.3 (Native KitKat single-DEX)\n" +
+        String buildInfo = "App: Nuvio Auto v1.0.4 (Native KitKat single-DEX)\n" +
                 "Author: Saurabh Nakkarike (@snakkarike)\n" +
                 "OS: Android 4.4.2 KitKat (API 19)\n" +
                 "Architecture: " + android.os.Build.CPU_ABI + "\n" +
@@ -4591,6 +5118,7 @@ public class MainActivity extends Activity {
             guestCard.addView(gDesc);
             body.addView(guestCard);
 
+            renderTraktCard();
             return;
         }
 
@@ -4893,6 +5421,820 @@ public class MainActivity extends Activity {
 
         actionCard.addView(btnRow);
         body.addView(actionCard);
+
+        renderTraktCard();
+    }
+
+    void renderTraktCard() {
+        LinearLayout traktCard = cardLayout();
+        TextView traktTitle = text("TRAKT.TV ACCOUNT & SCROBBLER", 15);
+        traktTitle.setTypeface(null, 1);
+        traktTitle.setTextColor(accent);
+        traktCard.addView(traktTitle);
+
+        final TraktClient trakt = TraktClient.getInstance(this);
+        if (trakt.isConnected()) {
+            String note = trakt.hasCustomCredentials() ? " (Custom API Key)" : "";
+            TextView traktStatus = text("✓ Connected to Trakt.tv" + note, 14);
+            traktStatus.setTextColor(theme != null ? theme.statusPositive : 0xff4ade80);
+            traktStatus.setTypeface(null, 1);
+            traktStatus.setPadding(0, dp(4), 0, dp(2));
+            traktCard.addView(traktStatus);
+
+            TextView traktDesc = text("Playback progress, watch history, and episode scrobbles synchronize with your Trakt.tv account in real time.", 13);
+            traktDesc.setTextColor(muted);
+            traktDesc.setPadding(0, 0, 0, dp(10));
+            traktCard.addView(traktDesc);
+
+            LinearLayout actRow = new LinearLayout(this);
+            actRow.setOrientation(LinearLayout.HORIZONTAL);
+            actRow.setGravity(Gravity.CENTER_VERTICAL);
+
+            Button traktDisconnectBtn = btn("Disconnect Trakt", new Runnable() {
+                @Override
+                public void run() {
+                    trakt.disconnect();
+                    Toast.makeText(MainActivity.this, "Trakt.tv account disconnected", Toast.LENGTH_SHORT).show();
+                    accountView();
+                }
+            });
+            traktDisconnectBtn.setTextSize(13);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, traktDisconnectBtn, theme.errorContainer, theme.onErrorContainer, 0, 0, true);
+            } else {
+                traktDisconnectBtn.setBackgroundDrawable(shape(0xffc0392b, 6));
+                traktDisconnectBtn.setTextColor(Color.WHITE);
+            }
+            actRow.addView(traktDisconnectBtn, new LinearLayout.LayoutParams(-2, dp(40)));
+
+            Button cfgBtn = btn("⚙️ Edit API Keys", new Runnable() {
+                @Override
+                public void run() {
+                    showTraktApiConfigDialog(null);
+                }
+            });
+            cfgBtn.setTextSize(13);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, cfgBtn, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+            } else {
+                cfgBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+                cfgBtn.setTextColor(Color.WHITE);
+            }
+            LinearLayout.LayoutParams cfgLp = new LinearLayout.LayoutParams(-2, dp(40));
+            cfgLp.setMargins(dp(8), 0, 0, 0);
+            actRow.addView(cfgBtn, cfgLp);
+
+            traktCard.addView(actRow);
+        } else {
+            TextView traktDesc = text("Connect Trakt.tv to automatically scrobble watched movies and series without typing on the vehicle screen.", 13);
+            traktDesc.setTextColor(muted);
+            traktDesc.setPadding(0, dp(4), 0, dp(10));
+            traktCard.addView(traktDesc);
+
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+
+            Button traktLinkBtn = btn("🔗 Link Trakt (Quick Code)", new Runnable() {
+                @Override
+                public void run() {
+                    startTraktDeviceLink();
+                }
+            });
+            traktLinkBtn.setTextSize(13);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, traktLinkBtn, theme.primary, theme.onPrimary, 0, 0, true);
+            } else {
+                traktLinkBtn.setBackgroundDrawable(shape(accent, 6));
+                traktLinkBtn.setTextColor(Color.WHITE);
+            }
+            row.addView(traktLinkBtn, new LinearLayout.LayoutParams(-2, dp(40)));
+
+            Button traktApiBtn = btn("⚙️ API Keys", new Runnable() {
+                @Override
+                public void run() {
+                    showTraktApiConfigDialog(null);
+                }
+            });
+            traktApiBtn.setTextSize(13);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, traktApiBtn, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+            } else {
+                traktApiBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+                traktApiBtn.setTextColor(Color.WHITE);
+            }
+            LinearLayout.LayoutParams apiLp = new LinearLayout.LayoutParams(-2, dp(40));
+            apiLp.setMargins(dp(8), 0, 0, 0);
+            row.addView(traktApiBtn, apiLp);
+
+            Button traktTokenBtn = btn("🔑 Direct Token", new Runnable() {
+                @Override
+                public void run() {
+                    showTraktTokenDialog();
+                }
+            });
+            traktTokenBtn.setTextSize(13);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, traktTokenBtn, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+            } else {
+                traktTokenBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+                traktTokenBtn.setTextColor(Color.WHITE);
+            }
+            LinearLayout.LayoutParams tokLp = new LinearLayout.LayoutParams(-2, dp(40));
+            tokLp.setMargins(dp(8), 0, 0, 0);
+            row.addView(traktTokenBtn, tokLp);
+
+            traktCard.addView(row);
+        }
+        body.addView(traktCard);
+    }
+
+    void showTraktApiConfigDialog(final Runnable onSavedRetry) {
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
+
+        TextView title = text("Trakt.tv API Configuration", 18);
+        title.setTypeface(null, 1);
+        title.setTextColor(theme != null ? theme.primary : accent);
+        shell.addView(title);
+
+        TextView desc = text("Create a free API app at: https://trakt.tv/oauth/applications\n(Name: Nuvio, Redirect URI: urn:ietf:wg:oauth:2.0:oob)\nThen paste your Client ID (and optional Client Secret) below:", 13);
+        desc.setTextColor(muted);
+        desc.setPadding(0, dp(4), 0, dp(12));
+        shell.addView(desc);
+
+        final SharedPreferences p = getSharedPreferences("nuvio_stremio_prefs", MODE_PRIVATE);
+
+        TextView idLabel = text("CLIENT ID *", 11);
+        idLabel.setTextColor(theme != null ? theme.onSurfaceVariant : muted);
+        idLabel.setTypeface(null, 1);
+        shell.addView(idLabel);
+
+        final EditText idInput = new EditText(this);
+        idInput.setHint("Paste Trakt Client ID (64 characters)…");
+        idInput.setText(p.getString("trakt_custom_client_id", ""));
+        idInput.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        idInput.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, idInput, theme != null ? theme.surfaceContainerHigh : bg, 8, 1, theme != null ? theme.outlineVariant : 0);
+        idInput.setPadding(dp(12), dp(8), dp(12), dp(8));
+        idInput.setSingleLine(true);
+        LinearLayout.LayoutParams idLp = new LinearLayout.LayoutParams(-1, dp(44));
+        idLp.setMargins(0, dp(4), 0, dp(10));
+        shell.addView(idInput, idLp);
+
+        TextView secLabel = text("CLIENT SECRET (OPTIONAL)", 11);
+        secLabel.setTextColor(theme != null ? theme.onSurfaceVariant : muted);
+        secLabel.setTypeface(null, 1);
+        shell.addView(secLabel);
+
+        final EditText secInput = new EditText(this);
+        secInput.setHint("Paste Trakt Client Secret (if generated)…");
+        secInput.setText(p.getString("trakt_custom_client_secret", ""));
+        secInput.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        secInput.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, secInput, theme != null ? theme.surfaceContainerHigh : bg, 8, 1, theme != null ? theme.outlineVariant : 0);
+        secInput.setPadding(dp(12), dp(8), dp(12), dp(8));
+        secInput.setSingleLine(true);
+        LinearLayout.LayoutParams secLp = new LinearLayout.LayoutParams(-1, dp(44));
+        secLp.setMargins(0, dp(4), 0, dp(14));
+        shell.addView(secInput, secLp);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button cancel = btn("Cancel", new Runnable() {
+            @Override
+            public void run() { d.dismiss(); }
+        });
+        cancel.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, cancel, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        }
+        btns.addView(cancel, new LinearLayout.LayoutParams(0, dp(42), 1));
+
+        Button save = btn("Save & Connect", new Runnable() {
+            @Override
+            public void run() {
+                String cId = idInput.getText().toString().trim();
+                String cSec = secInput.getText().toString().trim();
+                if (cId.isEmpty()) {
+                    Toast.makeText(MainActivity.this, "Please enter your Trakt Client ID", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                TraktClient.getInstance(MainActivity.this).saveCustomCredentials(cId, cSec);
+                Toast.makeText(MainActivity.this, "✓ Trakt API keys saved!", Toast.LENGTH_SHORT).show();
+                d.dismiss();
+                if (onSavedRetry != null) {
+                    onSavedRetry.run();
+                } else {
+                    startTraktDeviceLink();
+                }
+            }
+        });
+        save.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, save, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            save.setTypeface(null, 1);
+            save.setBackgroundDrawable(shape(accent, 8));
+            save.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(0, dp(42), 1);
+        svLp.setMargins(dp(8), 0, 0, 0);
+        btns.addView(save, svLp);
+
+        shell.addView(btns);
+        d.setContentView(shell);
+        d.show();
+
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(520)), WindowManager.LayoutParams.WRAP_CONTENT);
+            w.setGravity(Gravity.CENTER);
+        }
+    }
+
+    void showTraktTokenDialog() {
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
+
+        TextView title = text("Connect via Trakt Access Token", 18);
+        title.setTypeface(null, 1);
+        title.setTextColor(theme != null ? theme.primary : accent);
+        shell.addView(title);
+
+        TextView desc = text("If you already have a Trakt OAuth access token from trakt.tv or another app, paste it directly below:", 13);
+        desc.setTextColor(muted);
+        desc.setPadding(0, dp(4), 0, dp(12));
+        shell.addView(desc);
+
+        final EditText tokenIn = new EditText(this);
+        tokenIn.setHint("Paste Trakt Access Token (e.g. 64-char hex)…");
+        tokenIn.setText(TraktClient.getInstance(this).getAccessToken());
+        tokenIn.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        tokenIn.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, tokenIn, theme != null ? theme.surfaceContainerHigh : bg, 8, 1, theme != null ? theme.outlineVariant : 0);
+        tokenIn.setPadding(dp(12), dp(8), dp(12), dp(8));
+        tokenIn.setSingleLine(true);
+        LinearLayout.LayoutParams tLp = new LinearLayout.LayoutParams(-1, dp(44));
+        tLp.setMargins(0, 0, 0, dp(14));
+        shell.addView(tokenIn, tLp);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button cancel = btn("Cancel", new Runnable() {
+            @Override
+            public void run() { d.dismiss(); }
+        });
+        cancel.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, cancel, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        }
+        btns.addView(cancel, new LinearLayout.LayoutParams(0, dp(42), 1));
+
+        Button save = btn("Save & Activate", new Runnable() {
+            @Override
+            public void run() {
+                String token = tokenIn.getText().toString().trim();
+                if (token.isEmpty()) {
+                    Toast.makeText(MainActivity.this, "Please paste an access token", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                TraktClient.getInstance(MainActivity.this).saveDirectAccessToken(token);
+                Toast.makeText(MainActivity.this, "🎉 Trakt.tv account connected successfully!", Toast.LENGTH_LONG).show();
+                d.dismiss();
+                render("Account", false);
+            }
+        });
+        save.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, save, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            save.setTypeface(null, 1);
+            save.setBackgroundDrawable(shape(accent, 8));
+            save.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(0, dp(42), 1);
+        svLp.setMargins(dp(8), 0, 0, 0);
+        btns.addView(save, svLp);
+
+        shell.addView(btns);
+        d.setContentView(shell);
+        d.show();
+
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(520)), WindowManager.LayoutParams.WRAP_CONTENT);
+            w.setGravity(Gravity.CENTER);
+        }
+    }
+
+    void startTraktDeviceLink() {
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dp(24), dp(20), dp(24), dp(20));
+        layout.setGravity(Gravity.CENTER_HORIZONTAL);
+        if (theme != null) {
+            ThemeManager.styleSurfaceCard(this, layout, theme.surfaceContainerHighest, 16, 1, theme.outlineVariant);
+        } else {
+            layout.setBackgroundDrawable(shape(surface, 14));
+        }
+
+        TextView heading = text("Trakt.tv Device Activation", 18);
+        heading.setTypeface(null, 1);
+        heading.setTextColor(theme != null ? theme.primary : accent);
+        heading.setGravity(Gravity.CENTER);
+        layout.addView(heading);
+
+        final TextView statusText = text("Requesting activation code from Trakt…", 13);
+        statusText.setTextColor(muted);
+        statusText.setGravity(Gravity.CENTER);
+        statusText.setPadding(0, dp(8), 0, dp(8));
+        layout.addView(statusText);
+
+        final TextView codeView = text("••••••••", 32);
+        codeView.setTypeface(null, 1);
+        codeView.setTextColor(Color.WHITE);
+        codeView.setGravity(Gravity.CENTER);
+        codeView.setPadding(0, dp(12), 0, dp(12));
+        layout.addView(codeView);
+
+        final TextView instView = text("1. On your phone or PC, open: https://trakt.tv/activate\n2. Enter the 8-character code shown above and tap Authorize.", 13);
+        instView.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        instView.setPadding(0, dp(6), 0, dp(14));
+        instView.setGravity(Gravity.CENTER);
+        layout.addView(instView);
+
+        final LinearLayout errBtnRow = new LinearLayout(this);
+        errBtnRow.setOrientation(LinearLayout.HORIZONTAL);
+        errBtnRow.setGravity(Gravity.CENTER);
+        errBtnRow.setVisibility(View.GONE);
+        errBtnRow.setPadding(0, 0, 0, dp(12));
+
+        Button cfgBtn = btn("⚙️ Set API Keys", new Runnable() {
+            @Override
+            public void run() {
+                dialog.dismiss();
+                showTraktApiConfigDialog(new Runnable() {
+                    @Override
+                    public void run() {
+                        startTraktDeviceLink();
+                    }
+                });
+            }
+        });
+        cfgBtn.setTextSize(12);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, cfgBtn, theme.primaryContainer, theme.onPrimaryContainer, 0, 0, true);
+        } else {
+            cfgBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+            cfgBtn.setTextColor(Color.WHITE);
+        }
+        errBtnRow.addView(cfgBtn, new LinearLayout.LayoutParams(-2, dp(38)));
+
+        Button tokenBtn = btn("🔑 Direct Token", new Runnable() {
+            @Override
+            public void run() {
+                dialog.dismiss();
+                showTraktTokenDialog();
+            }
+        });
+        tokenBtn.setTextSize(12);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, tokenBtn, theme.secondaryContainer, theme.onSecondaryContainer, 0, 0, true);
+        } else {
+            tokenBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+            tokenBtn.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams tbLp = new LinearLayout.LayoutParams(-2, dp(38));
+        tbLp.setMargins(dp(8), 0, 0, 0);
+        errBtnRow.addView(tokenBtn, tbLp);
+
+        layout.addView(errBtnRow);
+
+        Button cancelBtn = btn("Cancel", new Runnable() {
+            @Override
+            public void run() {
+                TraktClient.getInstance(MainActivity.this).cancelPolling();
+                dialog.dismiss();
+            }
+        });
+        cancelBtn.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, cancelBtn, theme.surfaceContainer, theme.onSurface, 0, 0, true);
+        } else {
+            cancelBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+            cancelBtn.setTextColor(Color.WHITE);
+        }
+        layout.addView(cancelBtn, new LinearLayout.LayoutParams(dp(120), dp(40)));
+
+        dialog.setContentView(layout);
+        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface d) {
+                TraktClient.getInstance(MainActivity.this).cancelPolling();
+            }
+        });
+        dialog.show();
+
+        Window win = dialog.getWindow();
+        if (win != null) {
+            win.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(520)), WindowManager.LayoutParams.WRAP_CONTENT);
+            win.setGravity(Gravity.CENTER);
+        }
+
+        final TraktClient trakt = TraktClient.getInstance(this);
+        trakt.startDeviceCodeFlow(new TraktClient.Callback<TraktClient.DeviceCodeResponse>() {
+            @Override
+            public void onSuccess(final TraktClient.DeviceCodeResponse dcr) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!dialog.isShowing()) return;
+                        codeView.setText(dcr.userCode);
+                        codeView.setTextColor(theme != null ? theme.primary : accent);
+                        statusText.setText("Waiting for authorization on trakt.tv/activate…");
+
+                        trakt.pollForAuthorization(dcr.deviceCode, dcr.interval, new TraktClient.Callback<Boolean>() {
+                            @Override
+                            public void onSuccess(Boolean result) {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        dialog.dismiss();
+                                        Toast.makeText(MainActivity.this, "🎉 Trakt.tv account connected successfully!", Toast.LENGTH_LONG).show();
+                                        render("Account", false);
+                                    }
+                                });
+                            }
+
+                            @Override
+                            public void onError(final String error) {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (dialog.isShowing()) {
+                                            statusText.setText("⚠️ " + error);
+                                            statusText.setTextColor(0xffe74c3c);
+                                            errBtnRow.setVisibility(View.VISIBLE);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+
+            @Override
+            public void onError(final String error) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (dialog.isShowing()) {
+                            statusText.setText("⚠️ " + error);
+                            statusText.setTextColor(0xffe74c3c);
+                            errBtnRow.setVisibility(View.VISIBLE);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    void libraryView() {
+        if (!NuvioClient.getInstance(this).isLoggedIn()) {
+            LinearLayout emptyCard = cardLayout();
+            emptyCard.setGravity(Gravity.CENTER);
+            emptyCard.setPadding(dp(24), dp(36), dp(24), dp(36));
+
+            TextView lTitle = text("Sign In to Access Your Library", 20);
+            lTitle.setTypeface(null, 1);
+            lTitle.setTextColor(accent);
+            emptyCard.addView(lTitle);
+
+            TextView subtitle = text("Your Nuvio Library keeps your saved movies and TV series synchronized across all your devices.", 14);
+            subtitle.setTextColor(muted);
+            subtitle.setGravity(Gravity.CENTER);
+            subtitle.setPadding(0, dp(8), 0, dp(16));
+            emptyCard.addView(subtitle);
+
+            Button signInBtn = btn("🔑 Sign In with Nuvio", new Runnable() {
+                @Override
+                public void run() {
+                    render("Account", false);
+                }
+            });
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, signInBtn, theme.primary, theme.onPrimary, 0, 0, true);
+            }
+            emptyCard.addView(signInBtn, new LinearLayout.LayoutParams(dp(220), dp(44)));
+            add(emptyCard);
+            return;
+        }
+
+        // Header Row
+        LinearLayout headerRow = new LinearLayout(this);
+        headerRow.setOrientation(LinearLayout.HORIZONTAL);
+        headerRow.setGravity(Gravity.CENTER_VERTICAL);
+        headerRow.setPadding(0, dp(4), 0, dp(8));
+
+        TextView heading = text("My Library", 22);
+        heading.setTypeface(null, 1);
+        heading.setTextColor(accent);
+        headerRow.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
+
+        Button refreshBtn = btn("🔄 Sync", new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(MainActivity.this, "Syncing library with Nuvio…", Toast.LENGTH_SHORT).show();
+                syncLibraryAndRender();
+            }
+        });
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, refreshBtn, theme.surfaceContainerHighest, theme.onSurface, 0, 0, true);
+        }
+        headerRow.addView(refreshBtn, new LinearLayout.LayoutParams(-2, dp(38)));
+        add(headerRow);
+
+        // Filter chips: All, Movies, TV Series
+        final String currentFilter = prefs.getString("nuvio_lib_filter", "All");
+        LinearLayout filterRow = new LinearLayout(this);
+        filterRow.setOrientation(LinearLayout.HORIZONTAL);
+        filterRow.setPadding(0, 0, 0, dp(10));
+
+        String[] filters = {"All", "Movies", "TV Series"};
+        for (final String f : filters) {
+            Button fb = btn(f, new Runnable() {
+                @Override
+                public void run() {
+                    prefs.edit().putString("nuvio_lib_filter", f).apply();
+                    render("Library", false);
+                }
+            });
+            boolean isSel = f.equals(currentFilter);
+            if (theme != null) {
+                ThemeManager.styleFilterChip(this, fb, theme, f, isSel);
+            }
+            LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(-2, dp(36));
+            flp.setMargins(0, 0, dp(8), 0);
+            filterRow.addView(fb, flp);
+        }
+        add(filterRow);
+
+        renderLibraryGrid(currentFilter);
+    }
+
+    void syncLibraryAndRender() {
+        NuvioClient.getInstance(this).fetchLibraryItems(new NuvioClient.Callback<JSONArray>() {
+            @Override
+            public void onSuccess(JSONArray result) {
+                prefs.edit().putString("nuvio_library_cache", result.toString()).apply();
+                if ("Library".equals(page)) {
+                    render("Library", false);
+                }
+            }
+
+            @Override
+            public void onError(String error, int statusCode) {
+                Toast.makeText(MainActivity.this, "Sync error: " + error, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    void renderLibraryGrid(final String filter) {
+        String cached = prefs.getString("nuvio_library_cache", "[]");
+        JSONArray items = new JSONArray();
+        try {
+            items = new JSONArray(cached);
+        } catch (Exception ignored) {}
+
+        ArrayList<JSONObject> filtered = new ArrayList<JSONObject>();
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            String type = item.optString("content_type", "movie");
+            if ("Movies".equals(filter) && !"movie".equals(type)) continue;
+            if ("TV Series".equals(filter) && !"series".equals(type)) continue;
+            filtered.add(item);
+        }
+
+        if (filtered.isEmpty()) {
+            LinearLayout emptyCard = cardLayout();
+            emptyCard.setGravity(Gravity.CENTER);
+            emptyCard.setPadding(dp(20), dp(30), dp(20), dp(30));
+
+            TextView eTitle = text("Your library is empty", 17);
+            eTitle.setTypeface(null, 1);
+            eTitle.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+            emptyCard.addView(eTitle);
+
+            TextView eDesc = text("Browse Movies or TV Series and tap '＋ Add to Library' to bookmark them here.", 13);
+            eDesc.setTextColor(muted);
+            eDesc.setGravity(Gravity.CENTER);
+            eDesc.setPadding(0, dp(6), 0, dp(14));
+            emptyCard.addView(eDesc);
+
+            Button exploreBtn = btn("Explore Movies", new Runnable() {
+                @Override
+                public void run() {
+                    render("Movies", false);
+                }
+            });
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, exploreBtn, theme.primary, theme.onPrimary, 0, 0, true);
+            }
+            emptyCard.addView(exploreBtn, new LinearLayout.LayoutParams(dp(180), dp(40)));
+            add(emptyCard);
+            return;
+        }
+
+        // Render responsive grid rows (4 items per row on 1920x720)
+        LinearLayout currentRow = null;
+        for (int i = 0; i < filtered.size(); i++) {
+            final JSONObject it = filtered.get(i);
+            final String cid = it.optString("content_id", "");
+            final String ctype = it.optString("content_type", "movie");
+            final String cname = it.optString("name", "Untitled");
+            final String cposter = it.optString("poster", "");
+
+            if (i % 4 == 0) {
+                currentRow = new LinearLayout(this);
+                currentRow.setOrientation(LinearLayout.HORIZONTAL);
+                currentRow.setBaselineAligned(false);
+                LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(-1, -2);
+                rlp.setMargins(0, 0, 0, dp(10));
+                currentRow.setLayoutParams(rlp);
+                add(currentRow);
+            }
+
+            final LinearLayout itemCard = new LinearLayout(this);
+            itemCard.setOrientation(LinearLayout.VERTICAL);
+            itemCard.setPadding(dp(6), dp(6), dp(6), dp(8));
+            itemCard.setClickable(true);
+            itemCard.setFocusable(true);
+            if (theme != null) {
+                ThemeManager.styleInteractiveCard(this, itemCard, theme.surfaceContainer, theme.onSurface, 12, 1, theme.outlineVariant);
+            } else {
+                itemCard.setBackgroundDrawable(shape(surface, 12));
+            }
+
+            RoundedImageView iv = new RoundedImageView(this);
+            iv.setCornerRadius(dp(8));
+            iv.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            if (theme != null) {
+                ThemeManager.styleSurfaceCard(this, iv, theme.surfaceContainerHighest, 8, 0, 0);
+            }
+            if (cposter.startsWith("http")) {
+                loadPoster(iv, cposter);
+            }
+
+            FrameLayout tile = new FrameLayout(this);
+            tile.addView(iv, new FrameLayout.LayoutParams(-1, -1));
+
+            TextView label = text(cname, 12);
+            label.setGravity(Gravity.CENTER);
+            label.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+            label.setMaxLines(2);
+            label.setEllipsize(TextUtils.TruncateAt.END);
+            tile.addView(label, new FrameLayout.LayoutParams(-1, -1));
+            iv.setTag(label);
+
+            itemCard.addView(tile, new LinearLayout.LayoutParams(-1, dp(160)));
+
+            TextView titleView = text(cname, 13);
+            titleView.setTypeface(null, 1);
+            titleView.setMaxLines(1);
+            titleView.setEllipsize(TextUtils.TruncateAt.END);
+            titleView.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+            titleView.setPadding(0, dp(6), 0, dp(2));
+            itemCard.addView(titleView);
+
+            TextView typeChip = badge("series".equals(ctype) ? "TV SERIES" : "MOVIE",
+                    theme != null ? theme.surfaceContainerHighest : 0xff283344,
+                    theme != null ? theme.primary : accent,
+                    theme != null ? theme.outlineVariant : 0);
+            typeChip.setTextSize(10);
+            typeChip.setPadding(dp(6), dp(2), dp(6), dp(2));
+            itemCard.addView(typeChip, new LinearLayout.LayoutParams(-2, -2));
+
+            itemCard.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    history.add(page);
+                    selectedId = cid;
+                    selectedType = ctype;
+                    selectedName = cname;
+                    selectedPoster = cposter;
+                    selectedVideoId = "";
+                    selectedVideoLabel = "";
+                    render("Streams", true);
+                }
+            });
+
+            itemCard.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("Remove from Library?")
+                            .setMessage("Remove \"" + cname + "\" from your Nuvio Library?")
+                            .setPositiveButton("Remove", new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface d, int which) {
+                                    toggleLibraryItem(cid, ctype, cname, cposter, null);
+                                    syncLibraryAndRender();
+                                }
+                            })
+                            .setNegativeButton("Cancel", null)
+                            .show();
+                    return true;
+                }
+            });
+
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(0, -2, 1);
+            clp.setMargins(dp(4), 0, dp(4), 0);
+            currentRow.addView(itemCard, clp);
+        }
+
+        int rem = filtered.size() % 4;
+        if (rem != 0 && currentRow != null) {
+            for (int k = 0; k < (4 - rem); k++) {
+                View placeholder = new View(this);
+                LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(0, dp(1), 1);
+                plp.setMargins(dp(4), 0, dp(4), 0);
+                currentRow.addView(placeholder, plp);
+            }
+        }
+    }
+
+    void toggleLibraryItem(final String contentId, final String contentType, final String name,
+                           final String poster, final Button btn) {
+        if (!NuvioClient.getInstance(this).isLoggedIn()) {
+            Toast.makeText(this, "Sign in to Nuvio under Account to save to Library.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        boolean currentlyIn = NuvioClient.getInstance(this).isInLibrary(contentId);
+        if (currentlyIn) {
+            if (btn != null) {
+                btn.setText("＋ Add to Library");
+                if (theme != null) {
+                    ThemeManager.stylePillButton(this, btn, theme.surfaceContainerHighest, theme.onSurface, 1, theme.outlineVariant, true);
+                }
+            }
+            Toast.makeText(this, "Removed from Library", Toast.LENGTH_SHORT).show();
+            NuvioClient.getInstance(this).removeFromLibrary(contentId, new NuvioClient.Callback<Boolean>() {
+                @Override public void onSuccess(Boolean res) {}
+                @Override public void onError(String err, int code) {}
+            });
+        } else {
+            if (btn != null) {
+                btn.setText("✓ In Library");
+                if (theme != null) {
+                    ThemeManager.stylePillButton(this, btn, theme.primary, theme.onPrimary, 0, 0, true);
+                }
+            }
+            Toast.makeText(this, "Added to Library!", Toast.LENGTH_SHORT).show();
+            NuvioClient.getInstance(this).addToLibrary(contentId, contentType, name, poster, new NuvioClient.Callback<Boolean>() {
+                @Override public void onSuccess(Boolean res) {}
+                @Override public void onError(String err, int code) {}
+            });
+        }
+    }
+
+    void dismissContinueWatching(final String contentId) {
+        String data = prefs.getString("nuvio_continue_watching", "");
+        if (!data.isEmpty()) {
+            try {
+                JSONArray all = new JSONArray(data);
+                JSONArray updated = new JSONArray();
+                for (int i = 0; i < all.length(); i++) {
+                    JSONObject item = all.optJSONObject(i);
+                    if (item == null) continue;
+                    String id = item.optString("id", "");
+                    if (!id.equals(contentId)) {
+                        updated.put(item);
+                    }
+                }
+                prefs.edit().putString("nuvio_continue_watching", updated.toString()).apply();
+            } catch (Exception ignored) {}
+        }
+
+        NuvioClient.getInstance(this).deleteWatchProgress(contentId, null);
+        Toast.makeText(this, "Removed from Continue Watching", Toast.LENGTH_SHORT).show();
+        render(page, false);
     }
 
     void rememberTitle() {

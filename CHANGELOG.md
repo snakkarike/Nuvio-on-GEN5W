@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.4] - 2026-11-16
+
+### 🗓️ Upcoming & Next Up Engine (`showUpcoming`)
+- **Automated Next Up Progression**: For series in the user's Continue Watching and Library, computes the next chronological episode (e.g., S1E2 after watching S1E1, or S2E1 upon finishing a season).
+- **Cinemeta Release Date Evaluation**: Cross-references future episode air dates. Future unreleased episodes display an `🗓️ UPCOMING` badge with release date, while aired episodes display `▶ NEXT UP`.
+- **One-Tap Episode Launch**: Tapping any Next Up card opens stream selection for that specific episode immediately, avoiding manual season/episode browsing.
+- **Upcoming Catalogs & Trakt Calendar**: Embedded "🗓️ Upcoming Movies" and "🗓️ Upcoming TV Series" catalog rows across Movies and Series views, backed by Trakt calendar API when linked (`/calendars/my/shows` and `/calendars/my/movies`).
+
+### 🎨 Anti-Aliased Rounded Inner Image Corners (`RoundedImageView`)
+- **Custom Hardware-Safe View (`RoundedImageView`)**: Built custom `ImageView` with software-layer fallback (`View.LAYER_TYPE_SOFTWARE`) for Android 4.4 KitKat to enable anti-aliased path clipping (`clipPath`) without OpenGL driver stutter.
+- **Full Card Cohesion**: Replaced square image borders across catalog tiles, continue watching cards, upcoming carousels, library grids, and stream detail banners with matching 8dp/10dp/12dp corner radii conforming to Material Design 3.
+
+### 🎬 Trakt.tv Integration & Device Activation (`TraktClient.java`)
+- **Resolved Device Code 401 & Missing Symbol Fix**: Added missing `JSONArray` import in `TraktClient.java` and resolved HTTP 401 error by introducing configurable Trakt API credentials.
+- **Custom Trakt API App & Direct Token Support**: Added `showTraktApiConfigDialog` and `showTraktTokenDialog` in Account Settings, allowing drivers to input their own Trakt API App Client ID & Secret (`trakt.tv/oauth/applications`) or directly paste an existing Trakt Access Token for instant 1-tap scrobbler activation.
+- **Adaptive Wide Landscape Dialog**: Optimized Trakt device activation dialog with 520dp auto-centering width, preventing text truncation on the Gen5W ultrawide display and surfacing immediate `[⚙️ Set API Keys]` and `[🔑 Direct Token]` action buttons upon any authorization failure.
+- **OAuth Device Code Flow**: Head unit generates an 8-character PIN via `https://api.trakt.tv/oauth/device/code` displayed in a dedicated dialog. Drivers can authorize on phone or computer at `trakt.tv/activate` with zero on-screen keyboard friction.
+- **Background Authorization Polling**: Automatically polls `/oauth/device/token` and links the account as soon as approved on phone.
+- **Live Video Scrobbling Engine**: Integrated `/scrobble/start`, `/scrobble/pause`, and `/scrobble/stop` directly into `ExoPlayerActivity`. Automatically syncs watch progress, movie/episode scrobbles, and marks titles as watched upon finishing.
+- **Account View Integration**: Added "TRAKT.TV ACCOUNT & SCROBBLER" card in the Account view with live connection status, link dialog, and one-tap unlinking.
+
+### 💬 External Subtitles Support & OpenSubtitles v3 Integration
+- **OpenSubtitles v3 Engine**: ExoPlayer now queries `https://opensubtitles-v3.strem.io/subtitles/{type}/{id}.json` dynamically when user opens the subtitle picker.
+- **Seamless Stream Subtitle Passing**: Streams delivering external WebVTT or SubRip subtitle lists pass them straight to ExoPlayer via Intent.
+- **Dynamic MediaSource Merging**: In ExoPlayer 2.14.2, external subtitle tracks are merged on-the-fly using `SingleSampleMediaSource` and `MergingMediaSource` without restarting playback or losing the user's current seek position (`resetPosition = false, resetState = false`).
+
+### ⚙️ Cloud Profile Playback Preferences (`/rest/v1/profile_settings`)
+- **Profile Audio & Subtitle Language Defaults**: Configured Cloud Profile Preferences in Settings with one-tap chips for preferred audio language (`English`, `Spanish`, `French`, `German`, `Italian`, `Japanese`, `Korean`, `Hindi`, `Auto`) and subtitles.
+- **Automatic Audio/Subtitle Track Pre-Selection**: ExoPlayer's `DefaultTrackSelector.ParametersBuilder` automatically selects audio and subtitle tracks matching the active Nuvio profile's saved preferences on video start.
+- **Bi-Directional Cloud Sync**: Modifying preferences synchronizes with Supabase `/rest/v1/profile_settings` upsert (`resolution=merge-duplicates`) and restores settings across profile switches and restarts.
+
+### 🌐 Complete Nuvio Supabase API Implementation (`NuvioClient.java`)
+- **Native Backend Client (`NuvioClient.java`)**: Dedicated, asynchronous client connecting to `api.nuvio.tv` via Conscrypt BoringSSL modern TLS 1.2/1.3 without external SDK dependencies.
+- **Automatic Session Renewal**: Transparent token refresh via `POST /auth/v1/token?grant_type=refresh_token` on HTTP 401 and at app startup, preventing abrupt session expiration during drives.
+- **My Library / Watchlist Tab**: Added dedicated "Library" tab to top navigation rail displaying synchronized saved titles (`GET /rest/v1/library_items`) with `All`, `Movies`, and `TV Series` filter chips.
+- **One-Tap Library Toggle**: Added interactive `[＋ Add to Library]` / `[✓ In Library]` toggle buttons on Movie and Series detail overviews with instant local cache and cloud synchronization (`POST` / `DELETE /rest/v1/library_items`).
+- **Continue Watching Dismissal**: Long-press on any Continue Watching card allows permanently removing or dismissing titles from cloud watch history (`DELETE /rest/v1/watch_progress`).
+- **Bi-Directional Addon Cloud Sync**: Installing or removing custom addons now pushes and deletes them directly to the user's Nuvio cloud account (`/rest/v1/addons`), syncing with desktop and mobile clients.
+- **Resilient Playback Progress Fallback**: Configured `PlaybackSync.java` with direct table upsert fallback to `/rest/v1/watch_progress` whenever custom RPCs are not deployed on self-hosted instances.
+
+---
+
 ## [1.0.3] - 2026-11-15
 
 ### 🚗 Verified Factory Automotive Telemetry & Safety Gate

@@ -50,14 +50,14 @@ jobs:
         shell: bash
         run: |
           version=$(sed -n -E 's/.*versionName ["'"'"']([^"'"'"']+)["'"'"'].*/\1/p' app/build.gradle)
-          if [ -z "$version" ]; then version="1.0.3"; fi
+          if [ -z "$version" ]; then version="1.0.4"; fi
           git archive --format=zip --output="dist/Nuvio-gen5-hmg-nemesis-v${version}-Source.zip" HEAD
           python3 -c "import zipfile; z=zipfile.ZipFile('dist/Nuvio-gen5-hmg-nemesis-v${version}-Source.zip'); assert z.testzip() is None and all(not p.startswith('.git/') for p in z.namelist())"
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Nuvio-gen5-hmg-nemesis-v1.0.3-Build-${{ github.run_number }}
+          name: Nuvio-gen5-hmg-nemesis-v1.0.4-Build-${{ github.run_number }}
           path: |
             app/build/outputs/apk/debug/*.apk
             dist/*.zip
@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           version=$(sed -n -E 's/.*versionName ["'"'"']([^"'"'"']+)["'"'"'].*/\1/p' app/build.gradle)
-          if [ -z "$version" ]; then version="1.0.3"; fi
+          if [ -z "$version" ]; then version="1.0.4"; fi
           tag="v${version}"
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
             tag="${GITHUB_REF_NAME}"
