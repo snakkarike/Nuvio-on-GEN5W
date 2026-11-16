@@ -85,7 +85,7 @@ public final class PlaybackSync {
         c.setRequestProperty("Content-Type", "application/json");
         c.setRequestProperty("apikey", "sb_publishable_1Clq8rlTVACkdcZuqr6_AD__xUUC_EN");
         c.setRequestProperty("Authorization", "Bearer " + auth);
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
         c.setConnectTimeout(10000);
         c.setReadTimeout(15000);
 
@@ -143,7 +143,7 @@ public final class PlaybackSync {
           tc.setRequestProperty("apikey", "sb_publishable_1Clq8rlTVACkdcZuqr6_AD__xUUC_EN");
           tc.setRequestProperty("Authorization", "Bearer " + auth);
           tc.setRequestProperty("Prefer", "resolution=merge-duplicates");
-          tc.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+          tc.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
           OutputStream tos = tc.getOutputStream();
           tos.write(entry.toString().getBytes("UTF-8"));
           tos.flush();

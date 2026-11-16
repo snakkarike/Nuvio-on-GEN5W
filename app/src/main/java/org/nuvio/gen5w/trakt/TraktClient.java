@@ -384,7 +384,7 @@ public final class TraktClient {
         c.setRequestProperty("Content-Type", "application/json");
         c.setRequestProperty("trakt-api-version", "2");
         c.setRequestProperty("trakt-api-key", getClientId());
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
 
         if (auth) {
             String token = getAccessToken();

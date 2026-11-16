@@ -59,8 +59,8 @@ def sha256_file(filepath):
 
 def get_version_info():
     gradle_path = os.path.join(ROOT_DIR, "app", "build.gradle")
-    version_name = "1.0.5"
-    version_code = 6
+    version_name = "1.0.6"
+    version_code = 7
     if os.path.isfile(gradle_path):
         with open(gradle_path, "r", encoding="utf-8") as f:
             content = f.read()

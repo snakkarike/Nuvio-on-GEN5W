@@ -526,7 +526,7 @@ public class MainActivity extends Activity {
         });
         header.addView(brandBox, new LinearLayout.LayoutParams(0, dp(44), 1));
 
-        TextView current = text("v1.0.5 • " + page.toUpperCase(Locale.US), 13);
+        TextView current = text("v1.0.6 • " + page.toUpperCase(Locale.US), 13);
         current.setTextColor(muted);
         header.addView(current);
         root.addView(header);
@@ -1476,7 +1476,7 @@ public class MainActivity extends Activity {
                     if (c instanceof HttpsURLConnection) {
                         ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(MainActivity.this));
                     }
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
                     c.setConnectTimeout(8000);
                     c.setReadTimeout(12000);
                     InputStream in = c.getInputStream();
@@ -1620,7 +1620,7 @@ public class MainActivity extends Activity {
                     if (c instanceof HttpsURLConnection) {
                         ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(MainActivity.this));
                     }
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
                     c.setConnectTimeout(8000);
                     c.setReadTimeout(12000);
                     if (c.getResponseCode() >= 400) {
@@ -2388,6 +2388,16 @@ public class MainActivity extends Activity {
                 badgesRow.setGravity(Gravity.CENTER_VERTICAL);
                 badgesRow.setPadding(0, 0, 0, dp(6));
 
+                // 0. Source Type Badge (Direct, Debrid-cached, or Needs account)
+                int srcType = getStreamSourceType(s);
+                if (srcType == SOURCE_TYPE_DIRECT) {
+                    addBadge(badgesRow, badge("🟢 Direct", 0xff15803d, Color.WHITE, 0));
+                } else if (srcType == SOURCE_TYPE_DEBRID_CACHED) {
+                    addBadge(badgesRow, badge("⚡ Debrid-cached", 0xff7c3aed, Color.WHITE, 0));
+                } else {
+                    addBadge(badgesRow, badge("🔒 Needs account", 0xffb91c1c, Color.WHITE, 0));
+                }
+
                 // 1. Quality Badge
                 if (quality.contains("4K")) {
                     addBadge(badgesRow, badge("4K UHD", 0xff9333ea, Color.WHITE, 0));
@@ -2474,7 +2484,9 @@ public class MainActivity extends Activity {
 
                 contentRow.addView(detailsCol, new LinearLayout.LayoutParams(0, -2, 1));
 
-                Button playBtn = btn("▶ Play Stream", new Runnable() {
+                final int finalSrcType = srcType;
+                String btnLabel = (finalSrcType == SOURCE_TYPE_NEEDS_ACCOUNT) ? "🔒 Needs Debrid" : "▶ Play Stream";
+                Button playBtn = btn(btnLabel, new Runnable() {
                     @Override
                     public void run() {
                         onStreamClicked(s);
@@ -2482,10 +2494,14 @@ public class MainActivity extends Activity {
                 });
                 playBtn.setTextSize(14);
                 if (theme != null) {
-                    ThemeManager.stylePillButton(this, playBtn, theme.primary, theme.onPrimary, 0, 0, true);
+                    if (finalSrcType == SOURCE_TYPE_NEEDS_ACCOUNT) {
+                        ThemeManager.stylePillButton(this, playBtn, theme.surfaceContainerHighest, theme.onSurfaceVariant, 1, theme.outlineVariant, true);
+                    } else {
+                        ThemeManager.stylePillButton(this, playBtn, theme.primary, theme.onPrimary, 0, 0, true);
+                    }
                 } else {
                     playBtn.setTypeface(null, 1);
-                    playBtn.setBackgroundDrawable(shape(accent, 8));
+                    playBtn.setBackgroundDrawable(shape(finalSrcType == SOURCE_TYPE_NEEDS_ACCOUNT ? 0xff334155 : accent, 8));
                     playBtn.setTextColor(Color.WHITE);
                 }
                 contentRow.addView(playBtn, new LinearLayout.LayoutParams(dp(140), dp(44)));
@@ -2574,6 +2590,156 @@ public class MainActivity extends Activity {
         return "";
     }
 
+    static final int SOURCE_TYPE_DIRECT = 0;
+    static final int SOURCE_TYPE_DEBRID_CACHED = 1;
+    static final int SOURCE_TYPE_NEEDS_ACCOUNT = 2;
+
+    int getStreamSourceType(JSONObject s) {
+        String url = s.optString("url", "").trim();
+        String infoHash = s.optString("infoHash", "").trim();
+        String rawTitle = s.optString("title", s.optString("name", "")).toLowerCase(Locale.US);
+
+        if (!url.isEmpty()) {
+            if (url.contains("torbox") || url.contains("debrid") || url.contains("premiumize")
+                    || rawTitle.contains("[rd+]") || rawTitle.contains("[tb+]") || rawTitle.contains("[pm+]")
+                    || rawTitle.contains("⚡") || rawTitle.contains("cached")) {
+                return SOURCE_TYPE_DEBRID_CACHED;
+            }
+            return SOURCE_TYPE_DIRECT;
+        }
+
+        if (!infoHash.isEmpty()) {
+            String torboxKey = prefs.getString("torbox_api_key", "").trim();
+            if (!torboxKey.isEmpty()) {
+                return SOURCE_TYPE_DEBRID_CACHED;
+            }
+            return SOURCE_TYPE_NEEDS_ACCOUNT;
+        }
+
+        return SOURCE_TYPE_DIRECT;
+    }
+
+    void showDebridRequiredDialog() {
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
+
+        TextView title = text("⚠️ Debrid Account Required", 18);
+        title.setTypeface(null, 1);
+        title.setTextColor(theme != null ? theme.primary : accent);
+        shell.addView(title);
+
+        TextView msg = text(
+            "This source is a bare P2P torrent (infoHash) and requires a Debrid cloud account to stream in your vehicle.\n\n" +
+            "Add a Torbox or Real-Debrid API key in Settings, or pick a direct stream labeled [🟢 Direct].",
+            14
+        );
+        msg.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        msg.setPadding(0, dp(10), 0, dp(18));
+        shell.addView(msg);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.RIGHT);
+
+        Button dismissBtn = btn("Pick a Direct Stream", new Runnable() {
+            @Override
+            public void run() {
+                d.dismiss();
+            }
+        });
+        dismissBtn.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, dismissBtn, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        } else {
+            dismissBtn.setBackgroundDrawable(shape(0xff222e3c, 8));
+            dismissBtn.setTextColor(Color.WHITE);
+        }
+        btns.addView(dismissBtn, new LinearLayout.LayoutParams(-2, dp(42)));
+
+        Button settingsBtn = btn("⚙️ Open Settings", new Runnable() {
+            @Override
+            public void run() {
+                d.dismiss();
+                history.add(page);
+                render("Debrid", true);
+            }
+        });
+        settingsBtn.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, settingsBtn, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            settingsBtn.setBackgroundDrawable(shape(accent, 8));
+            settingsBtn.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams setLp = new LinearLayout.LayoutParams(-2, dp(42));
+        setLp.setMargins(dp(10), 0, 0, 0);
+        btns.addView(settingsBtn, setLp);
+
+        shell.addView(btns);
+        d.setContentView(shell);
+        d.show();
+
+        Window win = d.getWindow();
+        if (win != null) {
+            win.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(540)), WindowManager.LayoutParams.WRAP_CONTENT);
+            win.setGravity(Gravity.CENTER);
+        }
+    }
+
+    void showStreamResolutionErrorDialog(final String errorDetail) {
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
+
+        TextView title = text("⚠️ Stream Resolution Failed", 18);
+        title.setTypeface(null, 1);
+        title.setTextColor(theme != null ? theme.error : 0xffe74c3c);
+        shell.addView(title);
+
+        String detail = (errorDetail != null && !errorDetail.isEmpty()) ? errorDetail : "Torrent not available on Debrid";
+        String msgText = "This torrent could not be converted into an HTTPS stream by your Debrid service.\n\n" +
+            "Error: " + detail + "\n\n" +
+            "The file may not be cached on Debrid yet. Please pick another stream result or select a source labeled [🟢 Direct].";
+
+        TextView msg = text(msgText, 14);
+        msg.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        msg.setPadding(0, dp(10), 0, dp(18));
+        shell.addView(msg);
+
+        Button okBtn = btn("Choose Another Stream", new Runnable() {
+            @Override
+            public void run() {
+                d.dismiss();
+            }
+        });
+        okBtn.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, okBtn, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            okBtn.setBackgroundDrawable(shape(accent, 8));
+            okBtn.setTextColor(Color.WHITE);
+        }
+        shell.addView(okBtn, new LinearLayout.LayoutParams(-1, dp(42)));
+
+        d.setContentView(shell);
+        d.show();
+
+        Window win = d.getWindow();
+        if (win != null) {
+            win.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(520)), WindowManager.LayoutParams.WRAP_CONTENT);
+            win.setGravity(Gravity.CENTER);
+        }
+    }
+
     void onStreamClicked(final JSONObject stream) {
         final String directUrl = stream.optString("url", "");
         final String infoHash = stream.optString("infoHash", "");
@@ -2589,8 +2755,7 @@ public class MainActivity extends Activity {
             // Check if Torbox API is configured
             final String torboxKey = prefs.getString("torbox_api_key", "");
             if (torboxKey.isEmpty()) {
-                Toast.makeText(this, "Torrent stream detected! Please add your Torbox API token in Debrid settings.", Toast.LENGTH_LONG).show();
-                render("Debrid", true);
+                showDebridRequiredDialog();
                 return;
             }
 
@@ -2598,10 +2763,31 @@ public class MainActivity extends Activity {
             progress.requestWindowFeature(Window.FEATURE_NO_TITLE);
             LinearLayout shell = new LinearLayout(this);
             shell.setOrientation(LinearLayout.VERTICAL);
-            shell.setPadding(dp(16), dp(16), dp(16), dp(16));
-            shell.setBackgroundDrawable(shape(surface, 12));
-            shell.addView(text("Resolving Torbox Stream…", 16));
-            shell.addView(text("Contacting Torbox Cloud Debrid API", 13));
+            shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+            ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 12, 1, theme != null ? theme.outlineVariant : 0);
+
+            TextView pTitle = text("Resolving Debrid Stream…", 17);
+            pTitle.setTypeface(null, 1);
+            pTitle.setTextColor(theme != null ? theme.primary : accent);
+            shell.addView(pTitle);
+
+            TextView pDesc = text("Requesting cached HTTPS video stream from Debrid CDN…", 13);
+            pDesc.setTextColor(muted);
+            pDesc.setPadding(0, dp(6), 0, dp(14));
+            shell.addView(pDesc);
+
+            Button cancelBtn = btn("Cancel", new Runnable() {
+                @Override
+                public void run() {
+                    progress.dismiss();
+                }
+            });
+            cancelBtn.setTextSize(12);
+            if (theme != null) {
+                ThemeManager.stylePillButton(MainActivity.this, cancelBtn, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+            }
+            shell.addView(cancelBtn, new LinearLayout.LayoutParams(dp(100), dp(36)));
+
             progress.setContentView(shell);
             progress.show();
 
@@ -2613,7 +2799,7 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                progress.dismiss();
+                                if (progress.isShowing()) progress.dismiss();
                                 openInAppPlayer(resolved, subs);
                             }
                         });
@@ -2621,8 +2807,8 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                progress.dismiss();
-                                Toast.makeText(MainActivity.this, "Torbox Error: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                                if (progress.isShowing()) progress.dismiss();
+                                showStreamResolutionErrorDialog(e.getMessage());
                             }
                         });
                     }
@@ -2826,7 +3012,7 @@ public class MainActivity extends Activity {
                         ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(MainActivity.this));
                     }
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
                     c.setConnectTimeout(8000);
                     if (c.getResponseCode() < 400) {
                         InputStream in = c.getInputStream();
@@ -3028,7 +3214,7 @@ public class MainActivity extends Activity {
                     c.setReadTimeout(18000);
                     c.setRequestProperty("Content-Type", "application/json");
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
 
                     JSONObject body = new JSONObject();
                     body.put("email", email);
@@ -3170,7 +3356,7 @@ public class MainActivity extends Activity {
             c.setReadTimeout(15000);
             c.setRequestProperty("apikey", NUVIO_ANON_KEY);
             c.setRequestProperty("Authorization", "Bearer " + token);
-            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
             c.setRequestProperty("Accept", "application/json");
 
             int code = c.getResponseCode();
@@ -3295,7 +3481,7 @@ public class MainActivity extends Activity {
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
                     c.setRequestProperty("Authorization", "Bearer " + auth);
                     c.setRequestProperty("Prefer", "return=representation");
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
 
                     JSONObject body = new JSONObject();
                     body.put("name", profileName);
@@ -3354,7 +3540,7 @@ public class MainActivity extends Activity {
                     c.setReadTimeout(15000);
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
                     c.setRequestProperty("Authorization", "Bearer " + auth);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
                     c.setRequestProperty("Accept", "application/json");
 
                     int code = c.getResponseCode();
@@ -3436,7 +3622,7 @@ public class MainActivity extends Activity {
                     c.setReadTimeout(15000);
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
                     c.setRequestProperty("Authorization", "Bearer " + auth);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
                     c.setRequestProperty("Accept", "application/json");
 
                     int code = c.getResponseCode();
@@ -5318,7 +5504,7 @@ public class MainActivity extends Activity {
         sysCard.addView(sTitle);
 
         String telemetryInfo = (vehicleGate != null) ? vehicleGate.getTelemetryStatus() : "N/A";
-        String buildInfo = "App: Nuvio Auto v1.0.5 (Native KitKat single-DEX)\n" +
+        String buildInfo = "App: Nuvio Auto v1.0.6 (Native KitKat single-DEX)\n" +
                 "Author: Saurabh Nakkarike (@snakkarike)\n" +
                 "OS: Android 4.4.2 KitKat (API 19)\n" +
                 "Architecture: " + android.os.Build.CPU_ABI + "\n" +
@@ -5460,7 +5646,7 @@ public class MainActivity extends Activity {
                                 ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(MainActivity.this));
                             }
                             c.setRequestProperty("apikey", NUVIO_ANON_KEY);
-                            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+                            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
                             c.setConnectTimeout(8000);
                             int code = c.getResponseCode();
                             c.disconnect();

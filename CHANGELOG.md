@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.0.5] - 2026-11-16
+## [1.0.6] - 2026-11-16
 
 ### 📱 Nuvio Remote Device Sign-In & Token Exchange (`nuvio.tv/link`)
 - **Zero In-Car Typing Authentication**: Drivers can authenticate on phone or PC at `https://nuvio.tv/link` using a 6-character automotive PIN code without using the on-screen keyboard.
@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Direct Supabase Cloud Fallback**: Added transparent fallback to direct project backend (`https://sxwcyzellfnuqtufxyjz.supabase.co`) for device link and token exchange to prevent gateway proxy policy blocks.
 
 ### 🚗 Vehicle Device Registration (`nuvio.tv/account?tab=devices`)
-- **Automotive Head Unit Whitelist Integration**: Head unit now registers with `p_client_name: "Nuvio TV"`, `p_client_version: "1.0.5"`, `p_platform: "Android TV 4.4.2"`, and compliant `p_installation_id: "nuvio-tv-gen5w-<uuid>"`.
+- **Automotive Head Unit Whitelist Integration**: Head unit now registers with `p_client_name: "Nuvio TV"`, `p_client_version: "1.0.6"`, `p_platform: "Android TV 4.4.2"`, and compliant `p_installation_id: "nuvio-tv-gen5w-<uuid>"`.
 - **Live Device Presence**: Genesis Gen5W now cleanly appears in your active devices list on `https://nuvio.tv/account?tab=devices` alongside other Nuvio apps.
 - **Automatic & Manual Registration**: Triggers device registration immediately upon remote sign-in completion, on app startup, and via dedicated one-tap button (`[🔄 Sync Device to Nuvio Account]`).
 - **Vehicle Device Card**: Added dedicated "REGISTERED VEHICLE DEVICE" section in the Account view with live automotive status, device ID, device renaming dialog, and one-tap cloud sync button.
@@ -24,6 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Ergonomic Profile Selection & Editing**: Removed cramped inline edit buttons from 136dp profile cards; added full-width `[Select]` action and long-press on profile cards to trigger editing.
 - **Manage Profiles Dialog**: Added dedicated `[Manage Profiles]` modal in the SWITCH NUVIO PROFILE section header for full profile creation, renaming, avatar emoji selection, PIN setup, and secondary profile deletion.
 - **Page Duplication Elimination**: Fixed double-render view duplication bug when syncing device identity or updating vehicle device name in Account settings.
+
+### 🏷️ Stream Source Badges & Automotive Playability Indicators
+- **Instant Source Classification**: Every stream result now displays an upfront, color-coded source badge as the very first indicator on the 1920×720 widescreen display:
+  - `🟢 Direct`: Free direct HTTP/HTTPS web stream. Immediately playable in vehicle without any cloud debrid account.
+  - `⚡ Debrid-cached`: Converted/cached stream via active Torbox or Debrid service.
+  - `🔒 Needs account`: Bare P2P torrent (`infoHash`) that requires a Debrid cloud service to stream in the car.
+- **Dynamic Play Button Styling**: Streams requiring a debrid key update the action button to `[🔒 Needs Debrid]` in a secondary outline style so drivers can distinguish playable streams from unconfigured torrents at a single glance.
+
+### ⚠️ Clear Debrid Error States & Cancelable Resolution
+- **Informative Debrid Required Modal**: Tapping an unconfigured torrent stream no longer displays a silent spinner or ambiguous toast; it opens a clear, high-contrast modal dialog explaining that P2P torrents require a Debrid account on vehicle cellular, with immediate shortcuts to `[Pick a Direct Stream]` or `[⚙️ Open Settings]`.
+- **Cancelable Resolution Progress**: Torbox/Debrid resolution now features a clean, cancellable progress dialog with a `[Cancel]` button, preventing drivers from being trapped on endless loading spinners if a host times out.
+- **Detailed Stream Resolution Error Dialog**: If a torrent fails to resolve or is not cached on Debrid servers, a dedicated modal clearly explains the reason and provides an instant one-tap return to the stream picker.
 
 ### ⚡ Movies & Series Tab Performance Optimization
 - **Eliminated Tab Switching Lag**: Streamlined catalog requests in `moviesView()` and `seriesView()`, pruned excessive concurrent category queries, capped initial catalog row renders to 12 tiles, and bounded upcoming continue-watching lookups to 3 active series. Switching tabs is now instantaneous on Gen5W Dalvik.

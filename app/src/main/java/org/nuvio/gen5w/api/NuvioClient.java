@@ -146,7 +146,7 @@ public final class NuvioClient {
                     JSONObject req = new JSONObject();
                     req.put("p_installation_id", getDeviceId());
                     req.put("p_client_name", "Nuvio TV"); // Required whitelist value for nuvio.tv/account?tab=devices
-                    req.put("p_client_version", "1.0.5");
+                    req.put("p_client_version", "1.0.6");
                     req.put("p_platform", "Android TV 4.4.2");
                     req.put("p_device_name", getDeviceName());
 
@@ -919,7 +919,7 @@ public final class NuvioClient {
         c.setRequestMethod(method);
         c.setConnectTimeout(12000);
         c.setReadTimeout(18000);
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.6");
         c.setRequestProperty("apikey", ANON_KEY);
         c.setRequestProperty("Accept", "application/json");
 
