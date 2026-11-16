@@ -59,6 +59,7 @@ import com.google.android.exoplayer2.video.VideoListener;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.nuvio.gen5w.api.NuvioClient;
 import org.nuvio.gen5w.gate.MotionGuard;
 import org.nuvio.gen5w.gate.VehicleVideoGate;
 import org.nuvio.gen5w.sync.PlaybackSync;
@@ -738,6 +739,17 @@ public class ExoPlayerActivity extends Activity {
                         status("Playback finished.");
                         if (!syncMetaId.isEmpty()) {
                             TraktClient.getInstance(ExoPlayerActivity.this).scrobbleStop(syncMetaId, syncMediaType, syncVideoId, syncItemTitle, 100f);
+                            int s = 0, e = 0;
+                            if (syncVideoId.contains(":")) {
+                                String[] parts = syncVideoId.split(":");
+                                if (parts.length >= 3) {
+                                    try {
+                                        s = Integer.parseInt(parts[1]);
+                                        e = Integer.parseInt(parts[2]);
+                                    } catch (Exception ignored) {}
+                                }
+                            }
+                            NuvioClient.getInstance(ExoPlayerActivity.this).recordWatchHistory(syncMetaId, syncMediaType, syncItemTitle, s, e, null);
                         }
                     }
                 }
@@ -1253,6 +1265,19 @@ public class ExoPlayerActivity extends Activity {
         if (!syncMetaId.isEmpty() && firstFrame) {
             float pct = (lastDuration > 0) ? (float) (lastPosition * 100.0 / lastDuration) : 0f;
             TraktClient.getInstance(this).scrobbleStop(syncMetaId, syncMediaType, syncVideoId, syncItemTitle, pct);
+            if (pct >= 90f) {
+                int s = 0, e = 0;
+                if (syncVideoId.contains(":")) {
+                    String[] parts = syncVideoId.split(":");
+                    if (parts.length >= 3) {
+                        try {
+                            s = Integer.parseInt(parts[1]);
+                            e = Integer.parseInt(parts[2]);
+                        } catch (Exception ignored) {}
+                    }
+                }
+                NuvioClient.getInstance(this).recordWatchHistory(syncMetaId, syncMediaType, syncItemTitle, s, e, null);
+            }
         }
         if (player != null) {
             player.release();

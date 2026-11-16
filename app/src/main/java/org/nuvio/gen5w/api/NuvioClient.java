@@ -39,6 +39,7 @@ public final class NuvioClient {
 
     private static final String TAG = "NuvioClient";
     public static final String DEFAULT_API_URL = "https://api.nuvio.tv";
+    public static final String FALLBACK_API_URL = "https://sxwcyzellfnuqtufxyjz.supabase.co";
     public static final String ANON_KEY = "sb_publishable_1Clq8rlTVACkdcZuqr6_AD__xUUC_EN";
     private static final String PREFS_NAME = "nuvio_stremio_prefs";
 
@@ -98,6 +99,215 @@ public final class NuvioClient {
     public boolean isLoggedIn() {
         String token = getAccessToken();
         return token.startsWith("ey") && token.contains(".");
+    }
+
+    public void saveAccessToken(String token) {
+        prefs.edit().putString("auth", token != null ? token.trim() : "").apply();
+    }
+
+    public void saveSession(String token, String refreshToken) {
+        SharedPreferences.Editor ed = prefs.edit();
+        if (token != null) ed.putString("auth", token.trim());
+        if (refreshToken != null) ed.putString("nuvio_refresh_token", refreshToken.trim());
+        ed.apply();
+    }
+
+    public String getDeviceId() {
+        String id = prefs.getString("nuvio_device_id", "");
+        if (id.isEmpty() || id.length() < 16) {
+            id = "nuvio-tv-gen5w-" + java.util.UUID.randomUUID().toString().replace("-", "");
+            prefs.edit().putString("nuvio_device_id", id).apply();
+        }
+        return id;
+    }
+
+    public String getDeviceName() {
+        return prefs.getString("nuvio_device_name", "Genesis Gen5W");
+    }
+
+    public void setDeviceName(String name) {
+        prefs.edit().putString("nuvio_device_name", name != null ? name.trim() : "").apply();
+    }
+
+    public boolean isDeviceRegistered() {
+        return prefs.getLong("nuvio_device_registered_at", 0) > 0;
+    }
+
+    public void registerDevice(final Callback<Boolean> callback) {
+        if (!isLoggedIn()) {
+            if (callback != null) postError(callback, "Not logged in", 401);
+            return;
+        }
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    // Official Nuvio device registration RPC for nuvio.tv/account?tab=devices
+                    JSONObject req = new JSONObject();
+                    req.put("p_installation_id", getDeviceId());
+                    req.put("p_client_name", "Nuvio TV"); // Required whitelist value for nuvio.tv/account?tab=devices
+                    req.put("p_client_version", "1.0.5");
+                    req.put("p_platform", "Android TV 4.4.2");
+                    req.put("p_device_name", getDeviceName());
+
+                    ApiResponse res = makeAuthenticatedRequest("POST", "/rest/v1/rpc/register_current_device", req.toString(), null);
+                    if (!res.isSuccess() && !FALLBACK_API_URL.equals(getBaseUrl())) {
+                        res = makeRequest("POST", FALLBACK_API_URL + "/rest/v1/rpc/register_current_device", req.toString(), true, getAccessToken(), null);
+                    }
+                    if (res.isSuccess()) {
+                        prefs.edit().putLong("nuvio_device_registered_at", System.currentTimeMillis()).apply();
+                        postSuccess(callback, true);
+                    } else {
+                        postError(callback, "Device registration HTTP " + res.statusCode, res.statusCode);
+                    }
+                } catch (Exception e) {
+                    postError(callback, e.getMessage(), 0);
+                }
+            }
+        });
+    }
+
+    public static class DeviceLinkInfo {
+        public final String code;          // 6-character user code for nuvio.tv/link (e.g. "BX5FWF")
+        public final String deviceCode;    // Secret code used to poll
+        public final String deviceNonce;   // Secret nonce matching the request
+        public final String linkUrl;       // "https://nuvio.tv/link"
+        public final int expiresInSec;
+        public final int intervalSec;
+
+        public DeviceLinkInfo(String code, String deviceCode, String deviceNonce, String linkUrl, int expiresInSec, int intervalSec) {
+            this.code = code;
+            this.deviceCode = deviceCode;
+            this.deviceNonce = deviceNonce;
+            this.linkUrl = linkUrl;
+            this.expiresInSec = expiresInSec;
+            this.intervalSec = intervalSec;
+        }
+    }
+
+    private volatile boolean pollingDeviceLink = false;
+
+    public void generateDeviceLink(final Callback<DeviceLinkInfo> callback) {
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    final String nonce = java.util.UUID.randomUUID().toString();
+                    JSONObject req = new JSONObject();
+                    req.put("p_device_name", getDeviceName());
+                    req.put("p_device_nonce", nonce);
+                    req.put("p_device_type", "tv");
+                    req.put("p_redirect_base_url", "https://nuvio.tv/link");
+
+                    ApiResponse res = makeRequest("POST", "/rest/v1/rpc/start_device_login_session", req.toString(), false);
+                    if (!res.isSuccess() && !FALLBACK_API_URL.equals(getBaseUrl())) {
+                        res = makeRequest("POST", FALLBACK_API_URL + "/rest/v1/rpc/start_device_login_session", req.toString(), false);
+                    }
+                    if (res.isSuccess()) {
+                        JSONArray arr = new JSONArray(res.body);
+                        if (arr.length() > 0) {
+                            JSONObject json = arr.getJSONObject(0);
+                            String userCode = json.optString("user_code", "");
+                            String deviceCode = json.optString("device_code", "");
+                            String uri = json.optString("verification_uri", "https://nuvio.tv/link");
+                            int interval = json.optInt("poll_interval_seconds", 3);
+                            postSuccess(callback, new DeviceLinkInfo(userCode, deviceCode, nonce, uri, 600, interval));
+                            return;
+                        }
+                    }
+                    postError(callback, "Failed to start device login session (HTTP " + res.statusCode + ")", res.statusCode);
+                } catch (Exception e) {
+                    postError(callback, e.getMessage(), 0);
+                }
+            }
+        });
+    }
+
+    public void pollDeviceLink(final String deviceCode, final String deviceNonce, final int intervalSec, final Callback<String> callback) {
+        pollingDeviceLink = true;
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                int intervalMs = Math.max(intervalSec, 3) * 1000;
+                long start = System.currentTimeMillis();
+                long timeout = 600 * 1000L; // 10 minutes
+
+                while (pollingDeviceLink && (System.currentTimeMillis() - start < timeout)) {
+                    try {
+                        Thread.sleep(intervalMs);
+                    } catch (InterruptedException e) {
+                        break;
+                    }
+
+                    if (!pollingDeviceLink) break;
+
+                    try {
+                        JSONObject req = new JSONObject();
+                        req.put("p_code", deviceCode);
+                        req.put("p_device_nonce", deviceNonce);
+
+                        ApiResponse res = makeRequest("POST", "/rest/v1/rpc/poll_tv_login_session", req.toString(), false);
+                        if (!res.isSuccess() && !FALLBACK_API_URL.equals(getBaseUrl())) {
+                            res = makeRequest("POST", FALLBACK_API_URL + "/rest/v1/rpc/poll_tv_login_session", req.toString(), false);
+                        }
+                        if (res.isSuccess()) {
+                            JSONArray arr = new JSONArray(res.body);
+                            if (arr.length() > 0) {
+                                JSONObject json = arr.getJSONObject(0);
+                                String status = json.optString("status", "");
+
+                                // 1. Direct token check (if present in poll response)
+                                String directToken = json.optString("access_token", json.optString("token", ""));
+                                if (!directToken.isEmpty()) {
+                                    pollingDeviceLink = false;
+                                    saveAccessToken(directToken);
+                                    registerDevice(null);
+                                    postSuccess(callback, directToken);
+                                    return;
+                                }
+
+                                // 2. Official exchange flow: when status is "approved", exchange deviceCode + deviceNonce for session tokens
+                                if ("approved".equalsIgnoreCase(status)) {
+                                    JSONObject exReq = new JSONObject();
+                                    exReq.put("code", deviceCode);
+                                    exReq.put("device_nonce", deviceNonce);
+
+                                    // Call /functions/v1/tv-logins-exchange with apikey and Authorization headers
+                                    ApiResponse exRes = makeRequest("POST", "/functions/v1/tv-logins-exchange", exReq.toString(), true, ANON_KEY, null);
+                                    // Fallback to official direct Supabase project domain if proxy blocked/failed
+                                    if (!exRes.isSuccess() && !FALLBACK_API_URL.equals(getBaseUrl())) {
+                                        exRes = makeRequest("POST", FALLBACK_API_URL + "/functions/v1/tv-logins-exchange", exReq.toString(), true, ANON_KEY, null);
+                                    }
+
+                                    if (exRes.isSuccess()) {
+                                        JSONObject exJson = new JSONObject(exRes.body);
+                                        String token = exJson.optString("access_token", "");
+                                        if (!token.isEmpty()) {
+                                            pollingDeviceLink = false;
+                                            saveAuthSession(exJson, "");
+                                            registerDevice(null);
+                                            postSuccess(callback, token);
+                                            return;
+                                        }
+                                    }
+                                } else if ("expired".equalsIgnoreCase(status) || "denied".equalsIgnoreCase(status)) {
+                                    pollingDeviceLink = false;
+                                    postError(callback, "Device pairing " + status, 400);
+                                    return;
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                }
+
+                pollingDeviceLink = false;
+                postError(callback, "Pairing timed out", 408);
+            }
+        });
+    }
+
+    public void cancelDeviceLinkPolling() {
+        pollingDeviceLink = false;
     }
 
     // =========================================================================
@@ -301,6 +511,34 @@ public final class NuvioClient {
                         postSuccess(callback, true);
                     } else {
                         postError(callback, "Delete profile failed (HTTP " + res.statusCode + ")", res.statusCode);
+                    }
+                } catch (Exception e) {
+                    postError(callback, e.getMessage(), -1);
+                }
+            }
+        });
+    }
+
+    public void updateProfile(final String profileId, final String name, final String avatarUrl, final String pin, final Callback<Boolean> callback) {
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    JSONObject body = new JSONObject();
+                    if (name != null && !name.trim().isEmpty()) {
+                        body.put("name", name.trim());
+                    }
+                    if (avatarUrl != null && !avatarUrl.trim().isEmpty()) {
+                        body.put("avatar_url", avatarUrl.trim());
+                    }
+                    if (pin != null) {
+                        body.put("pin", pin.trim());
+                    }
+                    ApiResponse res = makeAuthenticatedRequest("PATCH", "/rest/v1/profiles?id=eq." + profileId, body.toString(), "return=minimal");
+                    if (res.isSuccess()) {
+                        postSuccess(callback, true);
+                    } else {
+                        postError(callback, "Update profile failed (HTTP " + res.statusCode + ")", res.statusCode);
                     }
                 } catch (Exception e) {
                     postError(callback, e.getMessage(), -1);
@@ -520,6 +758,71 @@ public final class NuvioClient {
         });
     }
 
+    public void fetchWatchHistory(final Callback<JSONArray> callback) {
+        final int profId = getActiveProfileIntId();
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String path = "/rest/v1/watched_items?select=*&profile_id=eq." + profId + "&order=watched_at.desc&limit=50";
+                    ApiResponse res = makeAuthenticatedRequest("GET", path);
+                    if (res.isSuccess()) {
+                        JSONArray items = new JSONArray(res.body);
+                        postSuccess(callback, items);
+                    } else {
+                        // Fallback to /rest/v1/watch_history
+                        ApiResponse fb = makeAuthenticatedRequest("GET", "/rest/v1/watch_history?select=*&order=watched_at.desc&limit=50");
+                        if (fb.isSuccess()) {
+                            postSuccess(callback, new JSONArray(fb.body));
+                        } else {
+                            postError(callback, "Load history failed (HTTP " + res.statusCode + ")", res.statusCode);
+                        }
+                    }
+                } catch (Exception e) {
+                    postError(callback, e.getMessage(), -1);
+                }
+            }
+        });
+    }
+
+    public void recordWatchHistory(final String contentId, final String contentType, final String title, final int season, final int episode, final Callback<Boolean> callback) {
+        if (!isLoggedIn() || contentId == null || contentId.isEmpty()) return;
+        final int profId = getActiveProfileIntId();
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    JSONObject body = new JSONObject();
+                    body.put("content_id", contentId);
+                    body.put("content_type", contentType != null ? contentType : "movie");
+                    body.put("title", title != null ? title : "Untitled");
+                    body.put("profile_id", profId);
+                    if (season > 0) body.put("season", season);
+                    if (episode > 0) body.put("episode", episode);
+                    body.put("watched_at", getIsoTimestamp());
+
+                    ApiResponse res = makeAuthenticatedRequest("POST", "/rest/v1/watched_items", body.toString(), "resolution=merge-duplicates");
+                    if (!res.isSuccess()) {
+                        res = makeAuthenticatedRequest("POST", "/rest/v1/watch_history", body.toString(), "resolution=merge-duplicates");
+                    }
+                    if (res.isSuccess()) {
+                        postSuccess(callback, true);
+                    } else if (callback != null) {
+                        postError(callback, "Record history failed (HTTP " + res.statusCode + ")", res.statusCode);
+                    }
+                } catch (Exception e) {
+                    if (callback != null) postError(callback, e.getMessage(), -1);
+                }
+            }
+        });
+    }
+
+    public String getIsoTimestamp() {
+        java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US);
+        sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+        return sdf.format(new java.util.Date());
+    }
+
     // =========================================================================
     // 5. Addon Cloud Synchronization (/rest/v1/addons)
     // =========================================================================
@@ -607,7 +910,7 @@ public final class NuvioClient {
     private ApiResponse makeRequest(String method, String endpoint, String jsonBody, boolean needsAuth,
                                     String authToken, String preferHeader) throws Exception {
         String baseUrl = getBaseUrl();
-        URL url = new URL(baseUrl + endpoint);
+        URL url = new URL(endpoint.startsWith("http") ? endpoint : (baseUrl + endpoint));
         HttpURLConnection c = (HttpURLConnection) url.openConnection();
         if (c instanceof HttpsURLConnection) {
             ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(context));
@@ -616,7 +919,7 @@ public final class NuvioClient {
         c.setRequestMethod(method);
         c.setConnectTimeout(12000);
         c.setReadTimeout(18000);
-        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.4");
+        c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
         c.setRequestProperty("apikey", ANON_KEY);
         c.setRequestProperty("Accept", "application/json");
 

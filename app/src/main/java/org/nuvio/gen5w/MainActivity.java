@@ -313,6 +313,7 @@ public class MainActivity extends Activity {
             fetchNuvioProfiles();
             fetchNuvioAddons();
             fetchNuvioWatchProgress();
+            NuvioClient.getInstance(this).registerDevice(null);
         }
 
         restoreAddons();
@@ -525,7 +526,7 @@ public class MainActivity extends Activity {
         });
         header.addView(brandBox, new LinearLayout.LayoutParams(0, dp(44), 1));
 
-        TextView current = text("v1.0.4 • " + page.toUpperCase(Locale.US), 13);
+        TextView current = text("v1.0.5 • " + page.toUpperCase(Locale.US), 13);
         current.setTextColor(muted);
         header.addView(current);
         root.addView(header);
@@ -955,6 +956,7 @@ public class MainActivity extends Activity {
             } catch (Exception ignored) {}
         }
 
+        if (seriesInProgress.size() > 3) { while (seriesInProgress.size() > 3) seriesInProgress.remove(seriesInProgress.size() - 1); }
         if (!seriesInProgress.isEmpty()) {
             final LinearLayout section = new LinearLayout(this);
             section.setOrientation(LinearLayout.VERTICAL);
@@ -1210,9 +1212,6 @@ public class MainActivity extends Activity {
         showCatalog("Action Movies", CINEMETA + "catalog/movie/top/genre=Action.json", "movie");
         showCatalog("Comedy Movies", CINEMETA + "catalog/movie/top/genre=Comedy.json", "movie");
         showCatalog("Sci-Fi & Fantasy", CINEMETA + "catalog/movie/top/genre=Science%20Fiction.json", "movie");
-        showCatalog("Thriller & Suspense", CINEMETA + "catalog/movie/top/genre=Thriller.json", "movie");
-        showCatalog("Animation & Family", CINEMETA + "catalog/movie/top/genre=Animation.json", "movie");
-        showCatalog("Horror", CINEMETA + "catalog/movie/top/genre=Horror.json", "movie");
         showAddonCatalogs("movie");
     }
 
@@ -1310,7 +1309,7 @@ public class MainActivity extends Activity {
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.addView(row);
 
-        for (int i = 0; i < metas.length() && i < 16; i++) {
+        for (int i = 0; i < metas.length() && i < 12; i++) {
             JSONObject meta = metas.optJSONObject(i);
             if (meta != null) showTitle(meta, type, row);
         }
@@ -1477,7 +1476,7 @@ public class MainActivity extends Activity {
                     if (c instanceof HttpsURLConnection) {
                         ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(MainActivity.this));
                     }
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
                     c.setConnectTimeout(8000);
                     c.setReadTimeout(12000);
                     InputStream in = c.getInputStream();
@@ -1621,7 +1620,7 @@ public class MainActivity extends Activity {
                     if (c instanceof HttpsURLConnection) {
                         ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(MainActivity.this));
                     }
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
                     c.setConnectTimeout(8000);
                     c.setReadTimeout(12000);
                     if (c.getResponseCode() >= 400) {
@@ -2827,7 +2826,7 @@ public class MainActivity extends Activity {
                         ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(MainActivity.this));
                     }
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
                     c.setConnectTimeout(8000);
                     if (c.getResponseCode() < 400) {
                         InputStream in = c.getInputStream();
@@ -3029,7 +3028,7 @@ public class MainActivity extends Activity {
                     c.setReadTimeout(18000);
                     c.setRequestProperty("Content-Type", "application/json");
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
 
                     JSONObject body = new JSONObject();
                     body.put("email", email);
@@ -3115,15 +3114,18 @@ public class MainActivity extends Activity {
         if (token == null || token.trim().isEmpty()) return;
         final String t = token.trim();
         auth = t;
+        verifiedAccountEmail = prefs.getString("nuvio_email", "");
         prefs.edit().putString("auth", t).apply();
-        Toast.makeText(this, "Saving Nuvio auth token…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Connecting Nuvio account…", Toast.LENGTH_SHORT).show();
         apiWorkers.execute(new Runnable() {
             @Override
             public void run() {
                 fetchNuvioProfilesInternal(t);
+                NuvioClient.getInstance(MainActivity.this).registerDevice(null);
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
-                        Toast.makeText(MainActivity.this, "Token saved and Nuvio profiles loaded!", Toast.LENGTH_SHORT).show();
+                        verifiedAccountEmail = prefs.getString("nuvio_email", "");
+                        Toast.makeText(MainActivity.this, "Welcome! Nuvio account linked successfully.", Toast.LENGTH_SHORT).show();
                         render("Account", false);
                     }
                 });
@@ -3168,7 +3170,7 @@ public class MainActivity extends Activity {
             c.setReadTimeout(15000);
             c.setRequestProperty("apikey", NUVIO_ANON_KEY);
             c.setRequestProperty("Authorization", "Bearer " + token);
-            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
             c.setRequestProperty("Accept", "application/json");
 
             int code = c.getResponseCode();
@@ -3293,7 +3295,7 @@ public class MainActivity extends Activity {
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
                     c.setRequestProperty("Authorization", "Bearer " + auth);
                     c.setRequestProperty("Prefer", "return=representation");
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
 
                     JSONObject body = new JSONObject();
                     body.put("name", profileName);
@@ -3352,7 +3354,7 @@ public class MainActivity extends Activity {
                     c.setReadTimeout(15000);
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
                     c.setRequestProperty("Authorization", "Bearer " + auth);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
                     c.setRequestProperty("Accept", "application/json");
 
                     int code = c.getResponseCode();
@@ -3434,7 +3436,7 @@ public class MainActivity extends Activity {
                     c.setReadTimeout(15000);
                     c.setRequestProperty("apikey", NUVIO_ANON_KEY);
                     c.setRequestProperty("Authorization", "Bearer " + auth);
-                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
                     c.setRequestProperty("Accept", "application/json");
 
                     int code = c.getResponseCode();
@@ -3760,6 +3762,653 @@ public class MainActivity extends Activity {
         Window w = d.getWindow();
         if (w != null) {
             w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(520)), WindowManager.LayoutParams.WRAP_CONTENT);
+            w.setGravity(Gravity.CENTER);
+        }
+    }
+
+    
+    void showManageProfilesDialog() {
+        final JSONArray all = getNuvioProfiles();
+        if (all.length() == 0) {
+            Toast.makeText(this, "No profiles found to edit", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
+
+        TextView title = text("Manage Profiles", 18);
+        title.setTypeface(null, 1);
+        title.setTextColor(theme != null ? theme.primary : accent);
+        shell.addView(title);
+
+        TextView desc = text("Select a profile to edit name, avatar emoji, PIN lock, or delete:", 13);
+        desc.setTextColor(muted);
+        desc.setPadding(0, dp(4), 0, dp(14));
+        shell.addView(desc);
+
+        for (int i = 0; i < all.length(); i++) {
+            final JSONObject p = all.optJSONObject(i);
+            if (p == null) continue;
+            final String pName = p.optString("name", "Profile " + (i + 1));
+            final String pAvatar = p.optString("avatar_url", "👤");
+            final boolean isDef = p.optBoolean("is_default", false);
+
+            LinearLayout pRow = new LinearLayout(this);
+            pRow.setOrientation(LinearLayout.HORIZONTAL);
+            pRow.setGravity(Gravity.CENTER_VERTICAL);
+            pRow.setPadding(dp(12), dp(8), dp(12), dp(8));
+            if (theme != null) {
+                ThemeManager.styleSurfaceCard(this, pRow, theme.surfaceContainerHigh, 8, 1, theme.outlineVariant);
+            } else {
+                pRow.setBackgroundDrawable(shape(0xff232b38, 8));
+            }
+
+            TextView av = text(pAvatar, 20);
+            pRow.addView(av);
+
+            TextView nm = text(pName + (isDef ? " (Primary)" : ""), 14);
+            nm.setTypeface(null, 1);
+            nm.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+            nm.setPadding(dp(10), 0, 0, 0);
+            pRow.addView(nm, new LinearLayout.LayoutParams(0, -2, 1));
+
+            Button editB = btn("Edit", new Runnable() {
+                @Override
+                public void run() {
+                    d.dismiss();
+                    showEditProfileDialog(p);
+                }
+            });
+            editB.setTextSize(12);
+            if (theme != null) {
+                ThemeManager.stylePillButton(MainActivity.this, editB, theme.primary, theme.onPrimary, 0, 0, true);
+            } else {
+                editB.setBackgroundDrawable(shape(accent, 6));
+                editB.setTextColor(Color.WHITE);
+            }
+            pRow.addView(editB, new LinearLayout.LayoutParams(dp(70), dp(34)));
+
+            LinearLayout.LayoutParams rLp = new LinearLayout.LayoutParams(-1, dp(50));
+            rLp.setMargins(0, 0, 0, dp(8));
+            shell.addView(pRow, rLp);
+        }
+
+        Button closeBtn = btn("Done", new Runnable() {
+            @Override
+            public void run() {
+                d.dismiss();
+            }
+        });
+        closeBtn.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, closeBtn, theme.surfaceContainerHighest, theme.onSurface, 1, theme.outlineVariant, false);
+        } else {
+            closeBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+            closeBtn.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams cLp = new LinearLayout.LayoutParams(dp(120), dp(40));
+        cLp.setMargins(0, dp(6), 0, 0);
+        cLp.gravity = Gravity.CENTER_HORIZONTAL;
+        shell.addView(closeBtn, cLp);
+
+        d.setContentView(shell);
+        d.show();
+
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(520)), WindowManager.LayoutParams.WRAP_CONTENT);
+            w.setGravity(Gravity.CENTER);
+        }
+    }
+
+    void showEditProfileDialog(final JSONObject p) {
+        if (p == null) return;
+        final String profileId = p.optString("id", "");
+        final String curName = p.optString("name", "Profile");
+        final String curAvatar = p.optString("avatar_url", "👤");
+        final String curPin = p.optString("pin", "");
+        final boolean isDefault = p.optBoolean("is_default", false);
+
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
+
+        TextView title = text("Edit Profile: " + curName, 18);
+        title.setTypeface(null, 1);
+        title.setTextColor(theme != null ? theme.primary : accent);
+        shell.addView(title);
+
+        TextView desc = text("Update avatar emoji, profile name, or optional PIN lock:", 13);
+        desc.setTextColor(muted);
+        desc.setPadding(0, dp(4), 0, dp(10));
+        shell.addView(desc);
+
+        final String[] avatars = {"🚗", "🏎️", "🍿", "🎬", "⭐", "👤", "🚀", "🎮", "👑", "🐾"};
+        final String[] selectedAvatar = {curAvatar.isEmpty() ? avatars[0] : curAvatar};
+
+        LinearLayout avatarRow = new LinearLayout(this);
+        avatarRow.setOrientation(LinearLayout.HORIZONTAL);
+        avatarRow.setGravity(Gravity.CENTER);
+        for (final String av : avatars) {
+            Button avBtn = btn(av, null);
+            avBtn.setTextSize(20);
+            avBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    selectedAvatar[0] = av;
+                    Toast.makeText(MainActivity.this, "Selected: " + av, Toast.LENGTH_SHORT).show();
+                }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(44), dp(44));
+            lp.setMargins(dp(2), 0, dp(2), 0);
+            avatarRow.addView(avBtn, lp);
+        }
+        shell.addView(avatarRow);
+
+        TextView nLabel = text("PROFILE NAME", 11);
+        nLabel.setTextColor(theme != null ? theme.onSurfaceVariant : muted);
+        nLabel.setTypeface(null, 1);
+        nLabel.setPadding(0, dp(10), 0, dp(2));
+        shell.addView(nLabel);
+
+        final EditText nameInput = new EditText(this);
+        nameInput.setText(curName);
+        nameInput.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        nameInput.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, nameInput, theme != null ? theme.surfaceContainerHigh : bg, 8, 1, theme != null ? theme.outlineVariant : 0);
+        nameInput.setPadding(dp(12), dp(10), dp(12), dp(10));
+        nameInput.setSingleLine(true);
+        LinearLayout.LayoutParams nLp = new LinearLayout.LayoutParams(-1, dp(46));
+        nLp.setMargins(0, 0, 0, dp(8));
+        shell.addView(nameInput, nLp);
+
+        TextView pinLabel = text("PIN LOCK (4 DIGITS - OPTIONAL)", 11);
+        pinLabel.setTextColor(theme != null ? theme.onSurfaceVariant : muted);
+        pinLabel.setTypeface(null, 1);
+        shell.addView(pinLabel);
+
+        final EditText pinInput = new EditText(this);
+        pinInput.setHint("Leave empty to remove PIN");
+        pinInput.setText(curPin);
+        pinInput.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        pinInput.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, pinInput, theme != null ? theme.surfaceContainerHigh : bg, 8, 1, theme != null ? theme.outlineVariant : 0);
+        pinInput.setPadding(dp(12), dp(10), dp(12), dp(10));
+        pinInput.setSingleLine(true);
+        LinearLayout.LayoutParams pLp = new LinearLayout.LayoutParams(-1, dp(46));
+        pLp.setMargins(0, dp(2), 0, dp(14));
+        shell.addView(pinInput, pLp);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+
+        if (!isDefault) {
+            Button delBtn = btn("Delete", new Runnable() {
+                @Override
+                public void run() {
+                    d.dismiss();
+                    confirmDeleteProfile(profileId, curName);
+                }
+            });
+            delBtn.setTextSize(13);
+            if (theme != null) {
+                ThemeManager.stylePillButton(MainActivity.this, delBtn, theme.errorContainer, theme.onErrorContainer, 0, 0, true);
+            } else {
+                delBtn.setBackgroundDrawable(shape(0xffc0392b, 8));
+                delBtn.setTextColor(Color.WHITE);
+            }
+            LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(0, dp(42), 0.7f);
+            dLp.setMargins(0, 0, dp(8), 0);
+            btns.addView(delBtn, dLp);
+        }
+
+        Button cancel = btn("Cancel", new Runnable() {
+            @Override
+            public void run() { d.dismiss(); }
+        });
+        cancel.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, cancel, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        }
+        btns.addView(cancel, new LinearLayout.LayoutParams(0, dp(42), 1f));
+
+        Button save = btn("Save Changes", new Runnable() {
+            @Override
+            public void run() {
+                final String newNm = nameInput.getText().toString().trim();
+                final String finalName = newNm.isEmpty() ? curName : newNm;
+                final String newPin = pinInput.getText().toString().trim();
+                Toast.makeText(MainActivity.this, "Saving profile changes…", Toast.LENGTH_SHORT).show();
+
+                NuvioClient.getInstance(MainActivity.this).updateProfile(profileId, finalName, selectedAvatar[0], newPin, new NuvioClient.Callback<Boolean>() {
+                    @Override
+                    public void onSuccess(Boolean result) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "✓ Profile updated successfully", Toast.LENGTH_SHORT).show();
+                                d.dismiss();
+                                fetchNuvioProfiles();
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(final String error, final int statusCode) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "⚠️ Failed to update profile: " + error, Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        save.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, save, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            save.setTypeface(null, 1);
+            save.setBackgroundDrawable(shape(accent, 8));
+            save.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams svLp = new LinearLayout.LayoutParams(0, dp(42), 1.2f);
+        svLp.setMargins(dp(8), 0, 0, 0);
+        btns.addView(save, svLp);
+
+        shell.addView(btns);
+        d.setContentView(shell);
+        d.show();
+
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(540)), WindowManager.LayoutParams.WRAP_CONTENT);
+            w.setGravity(Gravity.CENTER);
+        }
+    }
+
+    void confirmDeleteProfile(final String profileId, final String profileName) {
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
+
+        TextView title = text("Delete Profile?", 18);
+        title.setTypeface(null, 1);
+        title.setTextColor(theme != null ? theme.error : 0xffe74c3c);
+        shell.addView(title);
+
+        TextView desc = text("Are you sure you want to permanently delete \"" + profileName + "\"? Watch progress and watchlist for this profile will be removed.", 13);
+        desc.setTextColor(muted);
+        desc.setPadding(0, dp(8), 0, dp(16));
+        shell.addView(desc);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button cancel = btn("Keep Profile", new Runnable() {
+            @Override
+            public void run() { d.dismiss(); }
+        });
+        cancel.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, cancel, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        }
+        btns.addView(cancel, new LinearLayout.LayoutParams(0, dp(42), 1f));
+
+        Button del = btn("Delete Permanently", new Runnable() {
+            @Override
+            public void run() {
+                d.dismiss();
+                Toast.makeText(MainActivity.this, "Deleting profile…", Toast.LENGTH_SHORT).show();
+                NuvioClient.getInstance(MainActivity.this).deleteProfile(profileId, new NuvioClient.Callback<Boolean>() {
+                    @Override
+                    public void onSuccess(Boolean result) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "Profile deleted", Toast.LENGTH_SHORT).show();
+                                fetchNuvioProfiles();
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(final String error, final int statusCode) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "⚠️ Failed to delete: " + error, Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        del.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, del, theme.errorContainer, theme.onErrorContainer, 0, 0, true);
+        } else {
+            del.setBackgroundDrawable(shape(0xffc0392b, 8));
+            del.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(0, dp(42), 1.2f);
+        dLp.setMargins(dp(8), 0, 0, 0);
+        btns.addView(del, dLp);
+
+        shell.addView(btns);
+        d.setContentView(shell);
+        d.show();
+
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(480)), WindowManager.LayoutParams.WRAP_CONTENT);
+            w.setGravity(Gravity.CENTER);
+        }
+    }
+
+    void startNuvioDeviceLink() {
+        final Dialog dialog = new Dialog(this);
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(dp(24), dp(20), dp(24), dp(20));
+        layout.setGravity(Gravity.CENTER_HORIZONTAL);
+        if (theme != null) {
+            ThemeManager.styleSurfaceCard(this, layout, theme.surfaceContainerHighest, 16, 1, theme.outlineVariant);
+        } else {
+            layout.setBackgroundDrawable(shape(surface, 14));
+        }
+
+        TextView heading = text("Nuvio Remote Device Sign-In", 18);
+        heading.setTypeface(null, 1);
+        heading.setTextColor(theme != null ? theme.primary : accent);
+        heading.setGravity(Gravity.CENTER);
+        layout.addView(heading);
+
+        final TextView statusText = text("Generating vehicle pairing code…", 13);
+        statusText.setTextColor(muted);
+        statusText.setGravity(Gravity.CENTER);
+        statusText.setPadding(0, dp(6), 0, dp(6));
+        layout.addView(statusText);
+
+        final TextView codeView = text("••••••", 34);
+        codeView.setTypeface(null, 1);
+        codeView.setTextColor(Color.WHITE);
+        codeView.setGravity(Gravity.CENTER);
+        codeView.setPadding(0, dp(10), 0, dp(10));
+        layout.addView(codeView);
+
+        final TextView instView = text("1. On your phone or PC, open: https://nuvio.tv/link\n2. Sign in to your Nuvio account and enter the 6-character code above.\n3. Your vehicle head unit will automatically link!", 13);
+        instView.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        instView.setPadding(0, dp(4), 0, dp(14));
+        instView.setGravity(Gravity.CENTER);
+        layout.addView(instView);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+        btns.setGravity(Gravity.CENTER);
+
+        Button cancelBtn = btn("Cancel", new Runnable() {
+            @Override
+            public void run() {
+                dialog.dismiss();
+            }
+        });
+        cancelBtn.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(MainActivity.this, cancelBtn, theme.surfaceContainer, theme.onSurface, 0, 0, true);
+        } else {
+            cancelBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+            cancelBtn.setTextColor(Color.WHITE);
+        }
+        btns.addView(cancelBtn, new LinearLayout.LayoutParams(dp(130), dp(40)));
+
+        layout.addView(btns);
+        dialog.setContentView(layout);
+        dialog.show();
+
+        Window win = dialog.getWindow();
+        if (win != null) {
+            win.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(560)), WindowManager.LayoutParams.WRAP_CONTENT);
+            win.setGravity(Gravity.CENTER);
+        }
+
+        dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+            @Override
+            public void onDismiss(DialogInterface d) {
+                NuvioClient.getInstance(MainActivity.this).cancelDeviceLinkPolling();
+            }
+        });
+
+        NuvioClient.getInstance(this).generateDeviceLink(new NuvioClient.Callback<NuvioClient.DeviceLinkInfo>() {
+            @Override
+            public void onSuccess(final NuvioClient.DeviceLinkInfo info) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!dialog.isShowing()) return;
+                        codeView.setText(info.code);
+                        codeView.setTextColor(theme != null ? theme.primary : accent);
+                        statusText.setText("Waiting for approval at " + info.linkUrl + "…");
+                        instView.setText("1. On your phone or PC, open: " + info.linkUrl + "\n2. Sign in and enter code: " + info.code + "\n3. Your Gen5W will sync your account automatically.");
+
+                        // Start polling Nuvio backend for authorization approval
+                        NuvioClient.getInstance(MainActivity.this).pollDeviceLink(info.deviceCode, info.deviceNonce, info.intervalSec, new NuvioClient.Callback<String>() {
+                            @Override
+                            public void onSuccess(final String token) {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        dialog.dismiss();
+                                        Toast.makeText(MainActivity.this, "🎉 Vehicle linked successfully to your Nuvio account!", Toast.LENGTH_LONG).show();
+                                        nuvioLoginWithToken(token);
+                                    }
+                                });
+                            }
+
+                            @Override
+                            public void onError(final String error, final int statusCode) {
+                                runOnUiThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (dialog.isShowing()) {
+                                            statusText.setText("⚠️ " + error);
+                                            statusText.setTextColor(0xffe74c3c);
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+
+            @Override
+            public void onError(final String error, final int statusCode) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (dialog.isShowing()) {
+                            statusText.setText("⚠️ " + error);
+                            statusText.setTextColor(0xffe74c3c);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    void renderVehicleDeviceCard() {
+        LinearLayout devCard = cardLayout();
+        TextView devTitle = text("REGISTERED VEHICLE DEVICE", 15);
+        devTitle.setTypeface(null, 1);
+        devTitle.setTextColor(accent);
+        devCard.addView(devTitle);
+
+        final NuvioClient nc = NuvioClient.getInstance(this);
+        String devName = nc.getDeviceName();
+        String devId = nc.getDeviceId();
+
+        TextView devStatus = text("✓ Active Automotive Device (Gen5W 1920×720)", 14);
+        devStatus.setTextColor(theme != null ? theme.statusPositive : 0xff4ade80);
+        devStatus.setTypeface(null, 1);
+        devStatus.setPadding(0, dp(4), 0, dp(2));
+        devCard.addView(devStatus);
+
+        TextView devDetails = text("Device: " + devName + "\nID: " + devId + "\nAppears in your logged-in devices list at nuvio.tv/account?tab=devices", 12);
+        devDetails.setTextColor(muted);
+        devDetails.setPadding(0, dp(2), 0, dp(10));
+        devCard.addView(devDetails);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        Button regBtn = btn("🔄 Sync Device to Nuvio Account", new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(MainActivity.this, "Registering device with Nuvio cloud…", Toast.LENGTH_SHORT).show();
+                nc.registerDevice(new NuvioClient.Callback<Boolean>() {
+                    @Override
+                    public void onSuccess(Boolean result) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "✓ Device registered on nuvio.tv/account", Toast.LENGTH_LONG).show();
+                                render("Account", false);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(final String error, final int statusCode) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "Device sync: " + error, Toast.LENGTH_SHORT).show();
+                            }
+                        });
+                    }
+                });
+            }
+        });
+        regBtn.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, regBtn, theme.primaryContainer, theme.onPrimaryContainer, 0, 0, true);
+        } else {
+            regBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+            regBtn.setTextColor(Color.WHITE);
+        }
+        row.addView(regBtn, new LinearLayout.LayoutParams(-2, dp(40)));
+
+        Button renameBtn = btn("✏️ Rename", new Runnable() {
+            @Override
+            public void run() {
+                showEditDeviceNameDialog();
+            }
+        });
+        renameBtn.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, renameBtn, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        } else {
+            renameBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+            renameBtn.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams rnLp = new LinearLayout.LayoutParams(-2, dp(40));
+        rnLp.setMargins(dp(8), 0, 0, 0);
+        row.addView(renameBtn, rnLp);
+
+        devCard.addView(row);
+        body.addView(devCard);
+    }
+
+    void showEditDeviceNameDialog() {
+        final Dialog d = new Dialog(this);
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE);
+        LinearLayout shell = new LinearLayout(this);
+        shell.setOrientation(LinearLayout.VERTICAL);
+        shell.setPadding(dp(22), dp(18), dp(22), dp(18));
+        ThemeManager.styleSurfaceCard(this, shell, theme != null ? theme.surfaceContainer : surface, 14, 1, theme != null ? theme.outlineVariant : 0);
+
+        TextView title = text("Edit Vehicle Device Name", 18);
+        title.setTypeface(null, 1);
+        title.setTextColor(theme != null ? theme.primary : accent);
+        shell.addView(title);
+
+        TextView desc = text("This name identifies your head unit on your Nuvio account devices page (nuvio.tv/account?tab=devices):", 13);
+        desc.setTextColor(muted);
+        desc.setPadding(0, dp(4), 0, dp(12));
+        shell.addView(desc);
+
+        final NuvioClient nc = NuvioClient.getInstance(this);
+        final EditText nameIn = new EditText(this);
+        nameIn.setText(nc.getDeviceName());
+        nameIn.setTextColor(theme != null ? theme.onSurface : Color.WHITE);
+        nameIn.setHintTextColor(theme != null ? theme.onSurfaceVariant : 0xff888888);
+        ThemeManager.styleSurfaceCard(this, nameIn, theme != null ? theme.surfaceContainerHigh : bg, 8, 1, theme != null ? theme.outlineVariant : 0);
+        nameIn.setPadding(dp(12), dp(10), dp(12), dp(10));
+        nameIn.setSingleLine(true);
+        LinearLayout.LayoutParams nLp = new LinearLayout.LayoutParams(-1, dp(46));
+        nLp.setMargins(0, 0, 0, dp(14));
+        shell.addView(nameIn, nLp);
+
+        LinearLayout btns = new LinearLayout(this);
+        btns.setOrientation(LinearLayout.HORIZONTAL);
+
+        Button cancel = btn("Cancel", new Runnable() {
+            @Override
+            public void run() { d.dismiss(); }
+        });
+        cancel.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, cancel, theme.surfaceContainerHigh, theme.onSurface, 1, theme.outlineVariant, false);
+        }
+        btns.addView(cancel, new LinearLayout.LayoutParams(0, dp(42), 1f));
+
+        Button save = btn("Save & Sync", new Runnable() {
+            @Override
+            public void run() {
+                String newNm = nameIn.getText().toString().trim();
+                if (!newNm.isEmpty()) {
+                    nc.setDeviceName(newNm);
+                    nc.registerDevice(null);
+                    Toast.makeText(MainActivity.this, "Device name updated", Toast.LENGTH_SHORT).show();
+                    render("Account", false);
+                }
+                d.dismiss();
+            }
+        });
+        save.setTextSize(13);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, save, theme.primary, theme.onPrimary, 0, 0, true);
+        } else {
+            save.setTypeface(null, 1);
+            save.setBackgroundDrawable(shape(accent, 8));
+            save.setTextColor(Color.WHITE);
+        }
+        LinearLayout.LayoutParams sLp = new LinearLayout.LayoutParams(0, dp(42), 1.2f);
+        sLp.setMargins(dp(8), 0, 0, 0);
+        btns.addView(save, sLp);
+
+        shell.addView(btns);
+        d.setContentView(shell);
+        d.show();
+
+        Window w = d.getWindow();
+        if (w != null) {
+            w.setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(32), dp(500)), WindowManager.LayoutParams.WRAP_CONTENT);
             w.setGravity(Gravity.CENTER);
         }
     }
@@ -4669,7 +5318,7 @@ public class MainActivity extends Activity {
         sysCard.addView(sTitle);
 
         String telemetryInfo = (vehicleGate != null) ? vehicleGate.getTelemetryStatus() : "N/A";
-        String buildInfo = "App: Nuvio Auto v1.0.4 (Native KitKat single-DEX)\n" +
+        String buildInfo = "App: Nuvio Auto v1.0.5 (Native KitKat single-DEX)\n" +
                 "Author: Saurabh Nakkarike (@snakkarike)\n" +
                 "OS: Android 4.4.2 KitKat (API 19)\n" +
                 "Architecture: " + android.os.Build.CPU_ABI + "\n" +
@@ -4811,7 +5460,7 @@ public class MainActivity extends Activity {
                                 ((HttpsURLConnection) c).setSSLSocketFactory(VideoTls.build(MainActivity.this));
                             }
                             c.setRequestProperty("apikey", NUVIO_ANON_KEY);
-                            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.0");
+                            c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; U; Android 4.4.2; en-us; Gen5W) Nuvio/1.0.5");
                             c.setConnectTimeout(8000);
                             int code = c.getResponseCode();
                             c.disconnect();
@@ -4994,7 +5643,36 @@ public class MainActivity extends Activity {
             serverCard.addView(sRow);
             body.addView(serverCard);
 
-            // Card 2: Nuvio Email / Password Sign In
+            // Card 2: Remote Device Sign In (No Typing)
+            LinearLayout remoteCard = cardLayout();
+            TextView rHeading = text("REMOTE DEVICE SIGN-IN (NO TYPING)", 16);
+            rHeading.setTypeface(null, 1);
+            rHeading.setTextColor(accent);
+            remoteCard.addView(rHeading);
+
+            TextView rPrompt = text("Sign in from your smartphone or computer without typing passwords on the in-car screen:", 13);
+            rPrompt.setTextColor(muted);
+            rPrompt.setPadding(0, dp(4), 0, dp(10));
+            remoteCard.addView(rPrompt);
+
+            Button linkBtn = btn("📱 Link Device via nuvio.tv/link (QR & PIN)", new Runnable() {
+                @Override
+                public void run() {
+                    startNuvioDeviceLink();
+                }
+            });
+            linkBtn.setTextSize(14);
+            if (theme != null) {
+                ThemeManager.stylePillButton(this, linkBtn, theme.primary, theme.onPrimary, 0, 0, true);
+            } else {
+                linkBtn.setTypeface(null, 1);
+                linkBtn.setBackgroundDrawable(shape(accent, 8));
+                linkBtn.setTextColor(Color.WHITE);
+            }
+            remoteCard.addView(linkBtn, new LinearLayout.LayoutParams(-1, dp(46)));
+            body.addView(remoteCard);
+
+            // Card 3: Nuvio Email / Password Sign In
             LinearLayout loginCard = cardLayout();
             TextView lHeading = text("SIGN IN WITH NUVIO CREDENTIALS", 16);
             lHeading.setTypeface(null, 1);
@@ -5188,11 +5866,31 @@ public class MainActivity extends Activity {
 
         // 2. Profile Switcher Carousel
         LinearLayout switchCard = cardLayout();
+        LinearLayout swHdrRow = new LinearLayout(this);
+        swHdrRow.setOrientation(LinearLayout.HORIZONTAL);
+        swHdrRow.setGravity(Gravity.CENTER_VERTICAL);
+        swHdrRow.setPadding(0, 0, 0, dp(8));
+
         TextView swHeading = text("SWITCH NUVIO PROFILE", 15);
         swHeading.setTypeface(null, 1);
         swHeading.setTextColor(accent);
-        swHeading.setPadding(0, 0, 0, dp(8));
-        switchCard.addView(swHeading);
+        swHdrRow.addView(swHeading, new LinearLayout.LayoutParams(0, -2, 1));
+
+        Button manageProfBtn = btn("Manage Profiles", new Runnable() {
+            @Override
+            public void run() {
+                showManageProfilesDialog();
+            }
+        });
+        manageProfBtn.setTextSize(12);
+        if (theme != null) {
+            ThemeManager.stylePillButton(this, manageProfBtn, theme.surfaceContainerHighest, theme.onSurface, 1, theme.outlineVariant, false);
+        } else {
+            manageProfBtn.setBackgroundDrawable(shape(0xff222e3c, 6));
+            manageProfBtn.setTextColor(Color.WHITE);
+        }
+        swHdrRow.addView(manageProfBtn, new LinearLayout.LayoutParams(-2, dp(32)));
+        switchCard.addView(swHdrRow);
 
         HorizontalScrollView scroll = new HorizontalScrollView(this);
         scroll.setHorizontalScrollBarEnabled(false);
@@ -5277,6 +5975,10 @@ public class MainActivity extends Activity {
                 }
             };
 
+            LinearLayout pBtnRow = new LinearLayout(this);
+            pBtnRow.setOrientation(LinearLayout.HORIZONTAL);
+            pBtnRow.setGravity(Gravity.CENTER);
+
             Button selBtn = btn(isCurrent ? "✓ Active" : "Select", new Runnable() {
                 @Override
                 public void run() {
@@ -5298,7 +6000,15 @@ public class MainActivity extends Activity {
                 selBtn.setTextColor(Color.WHITE);
             }
             selBtn.setOnClickListener(switchListener);
-            pCard.addView(selBtn, new LinearLayout.LayoutParams(dp(96), dp(34)));
+            pCard.addView(selBtn, new LinearLayout.LayoutParams(-1, dp(34)));
+
+            pCard.setOnLongClickListener(new View.OnLongClickListener() {
+                @Override
+                public boolean onLongClick(View v) {
+                    showEditProfileDialog(p);
+                    return true;
+                }
+            });
 
             pCard.setOnClickListener(switchListener);
 
@@ -5421,6 +6131,9 @@ public class MainActivity extends Activity {
 
         actionCard.addView(btnRow);
         body.addView(actionCard);
+
+        // Vehicle Device Card (nuvio.tv/account?tab=devices)
+        renderVehicleDeviceCard();
 
         renderTraktCard();
     }
@@ -5975,7 +6688,7 @@ public class MainActivity extends Activity {
         filterRow.setOrientation(LinearLayout.HORIZONTAL);
         filterRow.setPadding(0, 0, 0, dp(10));
 
-        String[] filters = {"All", "Movies", "TV Series"};
+        String[] filters = {"All", "Movies", "TV Series", "History"};
         for (final String f : filters) {
             Button fb = btn(f, new Runnable() {
                 @Override
@@ -5994,7 +6707,11 @@ public class MainActivity extends Activity {
         }
         add(filterRow);
 
-        renderLibraryGrid(currentFilter);
+        if ("History".equals(currentFilter)) {
+            renderWatchHistoryGrid();
+        } else {
+            renderLibraryGrid(currentFilter);
+        }
     }
 
     void syncLibraryAndRender() {
@@ -6010,6 +6727,99 @@ public class MainActivity extends Activity {
             @Override
             public void onError(String error, int statusCode) {
                 Toast.makeText(MainActivity.this, "Sync error: " + error, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    
+    void renderWatchHistoryGrid() {
+        NuvioClient.getInstance(this).fetchWatchHistory(new NuvioClient.Callback<JSONArray>() {
+            @Override
+            public void onSuccess(final JSONArray result) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (!"Library".equals(page)) return;
+                        if (result == null || result.length() == 0) {
+                            TextView empty = text("No watch history recorded yet.\nCompleted movies and episodes will appear here automatically.", 14);
+                            empty.setTextColor(muted);
+                            empty.setGravity(Gravity.CENTER);
+                            empty.setPadding(0, dp(30), 0, dp(30));
+                            add(empty);
+                            return;
+                        }
+
+                        LinearLayout grid = new LinearLayout(MainActivity.this);
+                        grid.setOrientation(LinearLayout.VERTICAL);
+
+                        LinearLayout curRow = null;
+                        int cols = 4;
+                        for (int i = 0; i < result.length(); i++) {
+                            if (i % cols == 0) {
+                                curRow = new LinearLayout(MainActivity.this);
+                                curRow.setOrientation(LinearLayout.HORIZONTAL);
+                                curRow.setPadding(0, 0, 0, dp(12));
+                                grid.addView(curRow);
+                            }
+                            JSONObject h = result.optJSONObject(i);
+                            if (h == null) continue;
+                            final String contentId = h.optString("content_id", "");
+                            final String title = h.optString("title", "Untitled");
+                            final String type = h.optString("content_type", "movie");
+
+                            LinearLayout itemCard = new LinearLayout(MainActivity.this);
+                            itemCard.setOrientation(LinearLayout.VERTICAL);
+                            itemCard.setPadding(dp(12), dp(10), dp(12), dp(10));
+                            if (theme != null) {
+                                ThemeManager.styleInteractiveCard(MainActivity.this, itemCard, theme.surfaceContainer, theme.onSurface, 8, 1, theme.outlineVariant);
+                            } else {
+                                itemCard.setBackgroundDrawable(shape(surface, 8));
+                            }
+
+                            TextView tView = text(title, 13);
+                            tView.setTypeface(null, 1);
+                            tView.setSingleLine(true);
+                            tView.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                            itemCard.addView(tView);
+
+                            TextView subView = text("✓ Watched • " + type.toUpperCase(), 11);
+                            subView.setTextColor(theme != null ? theme.statusPositive : 0xff4ade80);
+                            subView.setPadding(0, dp(3), 0, 0);
+                            itemCard.addView(subView);
+
+                            itemCard.setClickable(true);
+                            itemCard.setOnClickListener(new View.OnClickListener() {
+                                @Override
+                                public void onClick(View v) {
+                                    if (!contentId.isEmpty()) {
+                                        history.add(page);
+                                        selectedId = contentId;
+                                        selectedType = type;
+                                        selectedName = title;
+                                        render("Details", true);
+                                    }
+                                }
+                            });
+
+                            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(64), 1f);
+                            lp.setMargins(0, 0, dp(8), 0);
+                            if (curRow != null) curRow.addView(itemCard, lp);
+                        }
+                        add(grid);
+                    }
+                });
+            }
+
+            @Override
+            public void onError(final String error, final int statusCode) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        TextView errView = text("Failed to load watch history: " + error, 13);
+                        errView.setTextColor(0xffe74c3c);
+                        add(errView);
+                    }
+                });
             }
         });
     }

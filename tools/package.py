@@ -59,8 +59,8 @@ def sha256_file(filepath):
 
 def get_version_info():
     gradle_path = os.path.join(ROOT_DIR, "app", "build.gradle")
-    version_name = "1.0.4"
-    version_code = 5
+    version_name = "1.0.5"
+    version_code = 6
     if os.path.isfile(gradle_path):
         with open(gradle_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -266,12 +266,17 @@ def main():
     package_store_zip()
     package_usb_distribution(version_name, version_code)
 
+    nemesis_pkg_name = f"nuvio.gen5w-{version_name}.zip"
+    nemesis_pkg_path = os.path.join(DIST_DIR, nemesis_pkg_name)
+    shutil.copy2(STORE_ZIP_PATH, nemesis_pkg_path)
+
     official_zip_name = f"Nuvio-gen5-hmg-nemesis-v{version_name}-USB-Installer.zip"
     official_zip_path = os.path.join(DIST_DIR, official_zip_name)
 
     print("\n" + "=" * 60)
     print(" [✓] Packaging & Verification Complete! Ready for Vehicle Installation.")
     print("=" * 60)
+    print(f" NEMESIS Pkg:    {nemesis_pkg_path}")
     print(f" Store Package:  {STORE_ZIP_PATH}")
     print(f" USB Folder:     {USB_DIR}")
     print(f" USB Installer:  {official_zip_path}")

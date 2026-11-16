@@ -50,14 +50,14 @@ jobs:
         shell: bash
         run: |
           version=$(sed -n -E 's/.*versionName ["'"'"']([^"'"'"']+)["'"'"'].*/\1/p' app/build.gradle)
-          if [ -z "$version" ]; then version="1.0.4"; fi
+          if [ -z "$version" ]; then version="1.0.5"; fi
           git archive --format=zip --output="dist/Nuvio-gen5-hmg-nemesis-v${version}-Source.zip" HEAD
           python3 -c "import zipfile; z=zipfile.ZipFile('dist/Nuvio-gen5-hmg-nemesis-v${version}-Source.zip'); assert z.testzip() is None and all(not p.startswith('.git/') for p in z.namelist())"
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Nuvio-gen5-hmg-nemesis-v1.0.4-Build-${{ github.run_number }}
+          name: Nuvio-gen5-hmg-nemesis-v1.0.5-Build-${{ github.run_number }}
           path: |
             app/build/outputs/apk/debug/*.apk
             dist/*.zip
@@ -71,7 +71,7 @@ jobs:
         run: |
           set -euo pipefail
           version=$(sed -n -E 's/.*versionName ["'"'"']([^"'"'"']+)["'"'"'].*/\1/p' app/build.gradle)
-          if [ -z "$version" ]; then version="1.0.4"; fi
+          if [ -z "$version" ]; then version="1.0.5"; fi
           tag="v${version}"
           if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
             tag="${GITHUB_REF_NAME}"
@@ -79,18 +79,24 @@ jobs:
 
           usb_zip="dist/Nuvio-gen5-hmg-nemesis-v${version}-USB-Installer.zip"
           src_zip="dist/Nuvio-gen5-hmg-nemesis-v${version}-Source.zip"
+          pkg_zip="dist/nuvio.gen5w-${version}.zip"
 
-          echo "Publishing release $tag with $usb_zip and $src_zip..."
+          if [ ! -f "$pkg_zip" ] && [ -f "dist/packages/nuvio.gen5w.zip" ]; then
+            cp "dist/packages/nuvio.gen5w.zip" "$pkg_zip"
+          fi
+
+          echo "Publishing release $tag with $usb_zip, $src_zip and $pkg_zip..."
 
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; updating release notes and assets..."
-            gh release upload "$tag" "$usb_zip" "$src_zip" --clobber
+            gh release upload "$tag" "$usb_zip" "$src_zip" "$pkg_zip" --clobber
             gh release edit "$tag" --title "Nuvio Auto $tag" --notes-file CHANGELOG.md
           else
             echo "Creating new release $tag..."
             gh release create "$tag" \
               "$usb_zip" \
               "$src_zip" \
+              "$pkg_zip" \
               --title "Nuvio Auto $tag" \
               --notes-file CHANGELOG.md \
               --target "${GITHUB_SHA}"

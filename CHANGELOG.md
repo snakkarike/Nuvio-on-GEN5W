@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.5] - 2026-11-16
+
+### 📱 Nuvio Remote Device Sign-In & Token Exchange (`nuvio.tv/link`)
+- **Zero In-Car Typing Authentication**: Drivers can authenticate on phone or PC at `https://nuvio.tv/link` using a 6-character automotive PIN code without using the on-screen keyboard.
+- **TV Login Session Polling & Token Exchange**: Integrated the official Supabase 3-step TV login flow (`start_device_login_session` -> `poll_tv_login_session` -> `tv-logins-exchange`). Upon phone approval, the head unit automatically exchanges the device authorization code for full user JWT tokens (`access_token`, `refresh_token`), auto-dismisses the pairing modal, and loads the user's account state seamlessly.
+- **Direct Supabase Cloud Fallback**: Added transparent fallback to direct project backend (`https://sxwcyzellfnuqtufxyjz.supabase.co`) for device link and token exchange to prevent gateway proxy policy blocks.
+
+### 🚗 Vehicle Device Registration (`nuvio.tv/account?tab=devices`)
+- **Automotive Head Unit Whitelist Integration**: Head unit now registers with `p_client_name: "Nuvio TV"`, `p_client_version: "1.0.5"`, `p_platform: "Android TV 4.4.2"`, and compliant `p_installation_id: "nuvio-tv-gen5w-<uuid>"`.
+- **Live Device Presence**: Genesis Gen5W now cleanly appears in your active devices list on `https://nuvio.tv/account?tab=devices` alongside other Nuvio apps.
+- **Automatic & Manual Registration**: Triggers device registration immediately upon remote sign-in completion, on app startup, and via dedicated one-tap button (`[🔄 Sync Device to Nuvio Account]`).
+- **Vehicle Device Card**: Added dedicated "REGISTERED VEHICLE DEVICE" section in the Account view with live automotive status, device ID, device renaming dialog, and one-tap cloud sync button.
+
+### 👤 Profile Management & UI Cleanups
+- **Ergonomic Profile Selection & Editing**: Removed cramped inline edit buttons from 136dp profile cards; added full-width `[Select]` action and long-press on profile cards to trigger editing.
+- **Manage Profiles Dialog**: Added dedicated `[Manage Profiles]` modal in the SWITCH NUVIO PROFILE section header for full profile creation, renaming, avatar emoji selection, PIN setup, and secondary profile deletion.
+- **Page Duplication Elimination**: Fixed double-render view duplication bug when syncing device identity or updating vehicle device name in Account settings.
+
+### ⚡ Movies & Series Tab Performance Optimization
+- **Eliminated Tab Switching Lag**: Streamlined catalog requests in `moviesView()` and `seriesView()`, pruned excessive concurrent category queries, capped initial catalog row renders to 12 tiles, and bounded upcoming continue-watching lookups to 3 active series. Switching tabs is now instantaneous on Gen5W Dalvik.
+
+### 📜 Watch History Engine (`/rest/v1/watched_items`)
+- **Automatic Watch Completion Logging**: `ExoPlayerActivity` automatically logs completed titles to Nuvio's `/rest/v1/watched_items` (with fallback to `/rest/v1/watch_history`) when playback finishes (`STATE_ENDED`) or when exiting after watching $\ge 90\%$ of total duration.
+- **Library History Tab**: Added "History" filter chip in `libraryView()` displaying recently watched movies and series with direct details and playback shortcuts.
+
+---
+
 ## [1.0.4] - 2026-11-16
 
 ### 🗓️ Upcoming & Next Up Engine (`showUpcoming`)
