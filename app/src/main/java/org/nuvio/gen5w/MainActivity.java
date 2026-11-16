@@ -591,11 +591,12 @@ public class MainActivity extends Activity {
                         render(target, false);
                     }
                 });
-                tab.setTextSize(12);
+                tab.setTextSize(15);
+                tab.setSingleLine(true);
                 tab.setPadding(dp(2), dp(2), dp(2), dp(2));
                 boolean isSelected = target.equals(page) || ("Home".equals(page) && "Movies".equals(target));
                 ThemeManager.styleNavPill(this, tab, theme, labels[i], isSelected);
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1);
+                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(44), 1);
                 lp.setMargins(dp(3), 0, dp(3), 0);
                 nav.addView(tab, lp);
             }
@@ -6952,6 +6953,8 @@ public class MainActivity extends Activity {
                             final String contentId = h.optString("content_id", "");
                             final String title = h.optString("title", "Untitled");
                             final String type = h.optString("content_type", "movie");
+                            final int season = h.optInt("season", 0);
+                            final int episode = h.optInt("episode", 0);
 
                             LinearLayout itemCard = new LinearLayout(MainActivity.this);
                             itemCard.setOrientation(LinearLayout.VERTICAL);
@@ -6968,7 +6971,8 @@ public class MainActivity extends Activity {
                             tView.setEllipsize(android.text.TextUtils.TruncateAt.END);
                             itemCard.addView(tView);
 
-                            TextView subView = text("✓ Watched • " + type.toUpperCase(), 11);
+                            String epInfo = (season > 0 && episode > 0) ? (" S" + season + "E" + episode) : "";
+                            TextView subView = text("✓ Watched • " + type.toUpperCase(Locale.US) + epInfo, 11);
                             subView.setTextColor(theme != null ? theme.statusPositive : 0xff4ade80);
                             subView.setPadding(0, dp(3), 0, 0);
                             itemCard.addView(subView);
@@ -6978,11 +6982,19 @@ public class MainActivity extends Activity {
                                 @Override
                                 public void onClick(View v) {
                                     if (!contentId.isEmpty()) {
-                                        history.add(page);
                                         selectedId = contentId;
                                         selectedType = type;
                                         selectedName = title;
-                                        render("Details", true);
+                                        selectedPoster = "";
+                                        if (season > 0 && episode > 0) {
+                                            selectedVideoId = contentId + ":" + season + ":" + episode;
+                                            selectedVideoLabel = "Season " + season + ", Episode " + episode;
+                                        } else {
+                                            selectedVideoId = "";
+                                            selectedVideoLabel = "";
+                                        }
+                                        rememberTitle();
+                                        render("Streams", true);
                                     }
                                 }
                             });
