@@ -185,7 +185,7 @@ public class MainActivity extends Activity {
     final ExecutorService catalogWorkers = Executors.newFixedThreadPool(4);
     final ExecutorService imageWorkers = Executors.newFixedThreadPool(4);
 
-    final LruCache<String, Bitmap> memoryPosters = new LruCache<String, Bitmap>(4096) {
+    final LruCache<String, Bitmap> memoryPosters = new LruCache<String, Bitmap>(32768) {
         @Override
         protected int sizeOf(String key, Bitmap value) {
             return Math.max(1, value.getByteCount() / 1024);
@@ -1445,29 +1445,35 @@ public class MainActivity extends Activity {
     void loadPoster(final ImageView view, final String url) {
         if (url == null || url.isEmpty() || !url.startsWith("http")) return;
 
-        // Synchronous check: Memory or Disk
-        Bitmap cached = getPosterFromCache(url);
-        if (cached != null) {
-            view.setImageBitmap(cached);
+        // Instant in-memory check (runs synchronously on UI thread - 0ms disk I/O)
+        Bitmap memCached = memoryPosters.get(url);
+        if (memCached != null) {
+            view.setImageBitmap(memCached);
             View lbl = (View) view.getTag();
             if (lbl != null) lbl.setVisibility(View.GONE);
             return;
         }
 
+        // Tag view with target URL to prevent stale recycling flickers
+        view.setContentDescription(url);
+
+        // Offload disk cache lookup & network fetch entirely to background thread pool
         imageWorkers.execute(new Runnable() {
             @Override
             public void run() {
                 try {
-                    // Check disk again inside worker
+                    // Check disk cache asynchronously off the UI thread
                     Bitmap diskBmp = getPosterFromCache(url);
                     if (diskBmp != null) {
                         final Bitmap bmp = diskBmp;
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                view.setImageBitmap(bmp);
-                                View lbl = (View) view.getTag();
-                                if (lbl != null) lbl.setVisibility(View.GONE);
+                                if (url.equals(view.getContentDescription())) {
+                                    view.setImageBitmap(bmp);
+                                    View lbl = (View) view.getTag();
+                                    if (lbl != null) lbl.setVisibility(View.GONE);
+                                }
                             }
                         });
                         return;
@@ -1511,9 +1517,11 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                view.setImageBitmap(bmp);
-                                View lbl = (View) view.getTag();
-                                if (lbl != null) lbl.setVisibility(View.GONE);
+                                if (url.equals(view.getContentDescription())) {
+                                    view.setImageBitmap(bmp);
+                                    View lbl = (View) view.getTag();
+                                    if (lbl != null) lbl.setVisibility(View.GONE);
+                                }
                             }
                         });
                     }
@@ -1590,14 +1598,16 @@ public class MainActivity extends Activity {
     void loadAvatar(final ImageView view, final String url) {
         if (url == null || url.isEmpty() || !url.startsWith("http")) return;
 
-        // Instant synchronous check: Memory or Local Disk
-        Bitmap cached = getAvatarFromCache(url);
-        if (cached != null) {
-            view.setImageBitmap(cached);
+        // Instant in-memory check (runs synchronously on UI thread - 0ms disk I/O)
+        Bitmap memCached = avatarMemory.get(url);
+        if (memCached != null) {
+            view.setImageBitmap(memCached);
             View lbl = (View) view.getTag();
             if (lbl != null) lbl.setVisibility(View.GONE);
             return;
         }
+
+        view.setContentDescription(url);
 
         imageWorkers.execute(new Runnable() {
             @Override
@@ -1609,9 +1619,11 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                view.setImageBitmap(bmp);
-                                View lbl = (View) view.getTag();
-                                if (lbl != null) lbl.setVisibility(View.GONE);
+                                if (url.equals(view.getContentDescription())) {
+                                    view.setImageBitmap(bmp);
+                                    View lbl = (View) view.getTag();
+                                    if (lbl != null) lbl.setVisibility(View.GONE);
+                                }
                             }
                         });
                         return;
@@ -1658,9 +1670,11 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                view.setImageBitmap(circular);
-                                View lbl = (View) view.getTag();
-                                if (lbl != null) lbl.setVisibility(View.GONE);
+                                if (url.equals(view.getContentDescription())) {
+                                    view.setImageBitmap(circular);
+                                    View lbl = (View) view.getTag();
+                                    if (lbl != null) lbl.setVisibility(View.GONE);
+                                }
                             }
                         });
                     }

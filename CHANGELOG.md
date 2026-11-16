@@ -21,6 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cancelable Resolution Progress**: Torbox/Debrid resolution now features a clean, cancellable progress dialog with a `[Cancel]` button, preventing drivers from being trapped on endless loading spinners if a host times out.
 - **Detailed Stream Resolution Error Dialog**: If a torrent fails to resolve or is not cached on Debrid servers, a dedicated modal clearly explains the reason and provides an instant one-tap return to the stream picker.
 
+### ⚡ Asynchronous Image Cache & Zero-Lag Tab Switching
+- **Non-Blocking UI Thread Image Loading**: Eliminated main-thread disk I/O when browsing or switching to Movies and Series tabs. Previously, `loadPoster()` synchronously searched the filesystem (`f.exists()`, `f.length()`) and decoded JPEG files from flash memory directly on the UI thread for every catalog tile, causing noticeable jank and input lag once the disk cache accumulated files.
+- **Background Disk Cache Decoding**: Disk cache lookups and JPEG decodes now run completely in background worker threads (`imageWorkers`), immediately releasing the main UI thread.
+- **Enlarged LruCache Memory Window**: Increased in-memory poster cache from 4 MB to 32 MB, allowing recently viewed poster bitmaps to remain resident in RAM and render with zero latency when switching back and forth between tabs.
+- **View Recycling Protection**: Tagged image views with `contentDescription` targets to ensure asynchronous decoded bitmaps only bind to their matching view cards and avoid visual glitches.
+
 ### 📐 Navigation & Library History Navigation Fixes
 - **Watch History Route Fix**: Fixed blank screen bug when clicking on a watch history item under Library -> History; properly initializes media metadata and routes directly to the stream selector.
 - **Top Navigation Bar Visibility**: Increased top navigation bar font size from 12sp to 15sp and pill height to 44dp for effortless arm's-length readability on 1920×720 automotive displays.

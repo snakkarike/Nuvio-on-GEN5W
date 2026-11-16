@@ -85,12 +85,15 @@ jobs:
             cp "dist/packages/nuvio.gen5w.zip" "$pkg_zip"
           fi
 
+          # Extract version-specific release notes from CHANGELOG.md
+          python3 tools/extract_changelog.py "$version" release_notes.md
+
           echo "Publishing release $tag with $usb_zip, $src_zip and $pkg_zip..."
 
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "Release $tag already exists; updating release notes and assets..."
             gh release upload "$tag" "$usb_zip" "$src_zip" "$pkg_zip" --clobber
-            gh release edit "$tag" --title "Nuvio Auto $tag" --notes-file CHANGELOG.md
+            gh release edit "$tag" --title "Nuvio Auto $tag" --notes-file release_notes.md
           else
             echo "Creating new release $tag..."
             gh release create "$tag" \
@@ -98,6 +101,6 @@ jobs:
               "$src_zip" \
               "$pkg_zip" \
               --title "Nuvio Auto $tag" \
-              --notes-file CHANGELOG.md \
+              --notes-file release_notes.md \
               --target "${GITHUB_SHA}"
           fi
